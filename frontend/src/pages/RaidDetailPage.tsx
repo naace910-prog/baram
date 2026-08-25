@@ -45,25 +45,76 @@ export default function RaidDetailPage() {
     qc.invalidateQueries({ queryKey: ['raids'] })
   }
 
+  const [statusPending, setStatusPending] = useState(false)
   const changeStatus = async (s: RaidStatus) => {
-    await raidApi.update(raidId, {
-      category: raid.category ?? undefined,
-      targetId: raid.targetId ?? undefined,
-      scheduledAt: raid.scheduledAt,
-      status: s,
-      memo: raid.memo ?? undefined,
-    })
-    qc.invalidateQueries({ queryKey: ['raid', raidId] })
-    qc.invalidateQueries({ queryKey: ['raids'] })
+    if (s === raid.status || statusPending) return
+    setStatusPending(true)
+    try {
+      const updated = await raidApi.update(raidId, {
+        category: raid.category ?? undefined,
+        targetId: raid.targetId ?? undefined,
+        scheduledAt: raid.scheduledAt,
+        status: s,
+        memo: raid.memo ?? undefined,
+      })
+      // 즉시 캐시 반영 → Segmented 값이 곧바로 변경됨
+      qc.setQueryData(['raid', raidId], updated)
+      qc.invalidateQueries({ queryKey: ['raids'] })
+      const label = s === 'DONE' ? '완료' : s === 'CANCELLED' ? '취소' : '예정'
+      message.success(`상태 변경: ${label}`)
+    } catch (e: any) {
+      message.error(e?.response?.data?.error ?? '상태 변경 실패')
+    } finally {
+      setStatusPending(false)
+    }
   }
 
   const removeRaid = () => {
+    const lootCount = loots.length
+    const totalSold = loots.reduce((s, l) => s + (l.soldPrice ?? 0), 0)
+    const distCount = loots.reduce((s, l) => s + l.shares.length, 0)
+    const unpaidTotal = loots.reduce((s, l) =>
+      s + l.shares.filter(sh => !sh.paid).reduce((ss, sh) => ss + sh.share, 0), 0)
+    const paidCount = loots.reduce((s, l) => s + l.shares.filter(sh => sh.paid).length, 0)
+    const hasImpact = lootCount > 0 || distCount > 0
+
     modal.confirm({
-      title: '레이드를 삭제하시겠습니까?',
+      title: hasImpact ? '⚠️ 관련 데이터도 함께 삭제됩니다' : '레이드 삭제',
+      width: 480,
+      content: (
+        <div style={{ whiteSpace: 'pre-line', lineHeight: 1.7 }}>
+          {hasImpact ? (
+            <>
+              <div>이 레이드에 관련된 아래 데이터가 <b>모두 함께 삭제</b>됩니다:</div>
+              <ul style={{ margin: '10px 0 10px 20px', padding: 0 }}>
+                {lootCount > 0 && (
+                  <li>득템 <b>{lootCount}</b>개 · 총 판매금액 <b>{totalSold.toLocaleString()}전</b></li>
+                )}
+                {distCount > 0 && (
+                  <li>분배 <b>{distCount}</b>건 (정산 완료 {paidCount}건 · <b style={{color: '#faad14'}}>미정산 {unpaidTotal.toLocaleString()}전</b>)</li>
+                )}
+                <li>파티 편성 · 참가확정 · 투표 기록</li>
+              </ul>
+              <div style={{ color: '#ff4d4f', marginTop: 8 }}>정말 삭제하시겠습니까?</div>
+            </>
+          ) : (
+            <div>이 레이드를 삭제하시겠습니까?</div>
+          )}
+        </div>
+      ),
+      okType: 'danger',
+      okText: hasImpact ? `모두 삭제 (${lootCount + distCount}건)` : '삭제',
+      cancelText: '취소',
       onOk: async () => {
-        await raidApi.delete(raidId)
-        qc.invalidateQueries({ queryKey: ['raids'] })
-        nav('/raids', { replace: true })
+        try {
+          await raidApi.delete(raidId)
+          message.success('레이드 삭제됨')
+          qc.invalidateQueries({ queryKey: ['raids'] })
+          qc.invalidateQueries({ queryKey: ['stats'] })
+          nav('/raids', { replace: true })
+        } catch (e: any) {
+          message.error(e?.response?.data?.error ?? '삭제 실패')
+        }
       }
     })
   }
@@ -96,6 +147,7 @@ export default function RaidDetailPage() {
               <Segmented
                 value={raid.status}
                 onChange={(v) => changeStatus(v as RaidStatus)}
+                disabled={statusPending}
                 options={[
                   { label: '예정', value: 'PLANNED' },
                   { label: '완료', value: 'DONE' },
@@ -190,7 +242,16 @@ export default function RaidDetailPage() {
                     dataSource={l.shares}
                     columns={[
                       { title: '문파원', dataIndex: 'nickname' },
-                      { title: '분배액', dataIndex: 'share', render: (v: number) => `${v.toLocaleString()}전` },
+                      { title: '분배액', dataIndex: 'share', width: 180,
+                        render: (v: number, s: any) => (
+                          <ShareAmountEdit
+                            amount={v}
+                            onSave={async (newAmount) => {
+                              await lootApi.updateShareAmount(raidId, l.id, s.id, newAmount)
+                              qc.invalidateQueries({ queryKey: ['loots', raidId] })
+                            }}
+                          />
+                        ) },
                       {
                         title: '정산', dataIndex: 'paid',
                         render: (paid: boolean, s) => (
@@ -242,51 +303,137 @@ export default function RaidDetailPage() {
   )
 }
 
+function ShareAmountEdit({ amount, onSave }: { amount: number; onSave: (v: number) => Promise<any> }) {
+  const [editing, setEditing] = useState(false)
+  const [val, setVal] = useState<number | null>(amount)
+  const [saving, setSaving] = useState(false)
+  const { message } = AntApp.useApp()
+
+  useEffect(() => { setVal(amount) }, [amount])
+
+  const save = async () => {
+    if (val == null || val < 0) { message.warning('0 이상 숫자 입력'); return }
+    if (val === amount) { setEditing(false); return }
+    setSaving(true)
+    try {
+      await onSave(val)
+      message.success('분배액 수정')
+      setEditing(false)
+    } catch (e: any) {
+      message.error(e?.response?.data?.error ?? '수정 실패')
+    } finally { setSaving(false) }
+  }
+
+  if (!editing) {
+    return (
+      <span
+        onClick={() => setEditing(true)}
+        style={{ cursor: 'pointer', textDecoration: 'underline dotted #d9d9d9' }}
+        title="클릭하여 수정"
+      >
+        {amount.toLocaleString()}전
+      </span>
+    )
+  }
+
+  return (
+    <Space.Compact size="small" style={{ width: '100%' }}>
+      <InputNumber
+        value={val}
+        onChange={(v) => setVal(v == null ? null : Number(v))}
+        min={0} step={100000}
+        formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+        style={{ width: 120 }}
+        autoFocus
+        onPressEnter={save}
+      />
+      <Button size="small" type="primary" onClick={save} loading={saving}>저장</Button>
+      <Button size="small" onClick={() => { setEditing(false); setVal(amount) }}>취소</Button>
+    </Space.Compact>
+  )
+}
+
 function BulkDropModal({ open, onClose, targets, raidId, onSaved }: {
   open: boolean; onClose: () => void; targets: RaidTarget[]; raidId: number
   onSaved: () => void
 }) {
   const { message } = AntApp.useApp()
   const [qty, setQty] = useState<Record<number, number>>({})
+  const [price, setPrice] = useState<Record<number, number>>({})
 
-  useEffect(() => { if (open) setQty({}) }, [open])
+  useEffect(() => { if (open) { setQty({}); setPrice({}) } }, [open])
+
+  const rows = targets.map(t => {
+    const q = qty[t.id] ?? 0
+    const p = price[t.id] ?? 0
+    return { t, q, p, sub: q * p }
+  })
+  const totalDrops = rows.reduce((s, r) => s + r.q, 0)
+  const totalPrice = rows.reduce((s, r) => s + r.sub, 0)
 
   const save = async () => {
-    const drops: BulkDropEntry[] = Object.entries(qty)
-      .map(([tid, q]) => ({ targetId: Number(tid), quantity: q }))
-      .filter(d => d.quantity > 0)
+    const drops: BulkDropEntry[] = rows
+      .filter(r => r.q > 0)
+      .map(r => ({ targetId: r.t.id, quantity: r.q, unitPrice: r.p > 0 ? r.p : undefined }))
     if (drops.length === 0) {
       message.warning('수량을 하나 이상 입력해주세요')
       return
     }
     await lootApi.bulkAdd(raidId, drops)
-    const total = drops.reduce((s, d) => s + d.quantity, 0)
-    message.success(`${total}개 득템 일괄 등록 완료`)
+    message.success(`${totalDrops}개 득템 일괄 등록${totalPrice > 0 ? ' · 총 ' + totalPrice.toLocaleString() + '전' : ''}`)
     onSaved(); onClose()
   }
 
   return (
-    <Modal open={open} onCancel={onClose} onOk={save} title="드랍 대량 입력" okText="등록" destroyOnClose>
+    <Modal open={open} onCancel={onClose} onOk={save} title="드랍 대량 입력" okText="등록" destroyOnClose width={560}>
       <div style={{ marginBottom: 12, color: '#8c8c8c', fontSize: 13 }}>
-        각 몹에서 몇 개씩 드랍했는지 입력. 개별 판매/분배는 이후 각 득템 카드에서.
+        각 몹의 드랍 수량과 <b>1개당 가격</b> 입력. 개별 분배·정산은 이후 각 득템 카드에서.
       </div>
       <div style={{ display: 'grid', gap: 10 }}>
-        {targets.map(t => (
-          <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ fontSize: 24, width: 32, textAlign: 'center' }}>{t.icon ?? '🎯'}</div>
-            <div style={{ flex: 1 }}>
+        {rows.map(({ t, q, p, sub }) => (
+          <div key={t.id} style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            padding: 8, borderRadius: 6,
+            background: q > 0 ? '#f9f0ff' : '#fafafa',
+          }}>
+            <div style={{ fontSize: 22, width: 28, textAlign: 'center' }}>{t.icon ?? '🎯'}</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontWeight: 600 }}>{t.name}</div>
-              <div style={{ fontSize: 12, color: '#8c8c8c' }}>{t.dropItemName}</div>
+              <div style={{ fontSize: 11, color: '#8c8c8c' }}>{t.dropItemName}</div>
             </div>
             <InputNumber
               min={0} max={99}
-              value={qty[t.id] ?? 0}
+              value={q}
               onChange={(v) => setQty(prev => ({ ...prev, [t.id]: Number(v) || 0 }))}
-              style={{ width: 90 }}
+              style={{ width: 78 }}
               addonAfter="개"
+              size="small"
             />
+            <InputNumber
+              min={0}
+              value={p}
+              onChange={(v) => setPrice(prev => ({ ...prev, [t.id]: Number(v) || 0 }))}
+              style={{ width: 140 }}
+              addonAfter="전/개"
+              step={100000}
+              formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+              placeholder="0"
+              size="small"
+            />
+            <div style={{ width: 100, textAlign: 'right', color: sub > 0 ? '#7c3aed' : '#bfbfbf', fontSize: 12, fontWeight: sub > 0 ? 600 : 400 }}>
+              {sub > 0 ? sub.toLocaleString() + '전' : '-'}
+            </div>
           </div>
         ))}
+      </div>
+      <Divider style={{ margin: '12px 0 8px' }} />
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 8px' }}>
+        <div style={{ fontSize: 14, color: '#595959' }}>
+          총 <b style={{ color: '#7c3aed' }}>{totalDrops}</b> 개
+        </div>
+        <div style={{ fontSize: 18, fontWeight: 700, color: totalPrice > 0 ? '#52c41a' : '#bfbfbf' }}>
+          TOTAL: {totalPrice.toLocaleString()} 전
+        </div>
       </div>
     </Modal>
   )

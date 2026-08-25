@@ -79,6 +79,16 @@ public class LootController {
         return lootService.listByRaid(raidId);
     }
 
+    @PutMapping("/{lootId}/shares/{shareId}")
+    public List<LootDto.LootView> updateShareAmount(@PathVariable Long raidId,
+                                                    @PathVariable Long lootId,
+                                                    @PathVariable Long shareId,
+                                                    @Valid @RequestBody LootDto.UpdateShareAmountRequest req) {
+        lootService.updateShareAmount(shareId, req.amount());
+        discord.syncLootCard(lootId, DiscordNotifier.LootTrigger.PAID_CHANGED);
+        return lootService.listByRaid(raidId);
+    }
+
     @PostMapping("/{lootId}/shares/{shareId}/paid")
     public List<LootDto.LootView> markPaid(@PathVariable Long raidId,
                                            @PathVariable Long lootId,

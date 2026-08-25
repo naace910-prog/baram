@@ -40,7 +40,11 @@ public class RaidController {
     }
 
     @PostMapping
-    public RaidDto.DetailView create(@Valid @RequestBody RaidDto.CreateRequest req) {
+    public RaidDto.DetailView create(@Valid @RequestBody RaidDto.CreateRequest req, HttpSession session) {
+        String role = (String) session.getAttribute(SessionKeys.MEMBER_ROLE);
+        if (!"MASTER".equals(role) && !"VICE".equals(role)) {
+            throw new IllegalStateException("문주(부문주)만 레이드 등록 가능합니다");
+        }
         Raid r = raidService.create(req);
         discord.syncRaidCard(r.getId(), DiscordNotifier.RaidTrigger.CREATED);
         String label;

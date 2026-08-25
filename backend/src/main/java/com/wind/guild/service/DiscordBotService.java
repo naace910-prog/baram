@@ -1,6 +1,7 @@
 package com.wind.guild.service;
 
 import com.wind.guild.config.DiscordProperties;
+import com.wind.guild.domain.RaidCategory;
 import com.wind.guild.domain.RaidTarget;
 import com.wind.guild.domain.VoteType;
 import com.wind.guild.repository.RaidTargetRepository;
@@ -38,6 +39,11 @@ public class DiscordBotService extends ListenerAdapter {
 
     private final DiscordProperties props;
     private final RaidTargetRepository targetRepository;
+    private final com.wind.guild.repository.MemberRepository memberRepository;
+    private final com.wind.guild.repository.RaidRepository raidRepository;
+    private final com.wind.guild.repository.RaidAttendeeRepository attendeeRepository;
+    private final com.wind.guild.repository.RaidLootRepository lootRepository;
+    private final com.wind.guild.repository.LootShareRepository shareRepository;
     private final RaidService raidService;
     private final ObjectProvider<DiscordNotifier> notifierProvider;
     private final ObjectProvider<ChatService> chatServiceProvider;
@@ -70,6 +76,12 @@ public class DiscordBotService extends ListenerAdapter {
             jda.awaitReady();
             log.info("Discord bot ready as {}", jda.getSelfUser().getAsTag());
             registerCommands();
+            // 서버 기동 완료 알림
+            TextChannel ch = notifyChannel();
+            if (ch != null) {
+                String msg = "🟢 서버 기동 완료 · " + LocalDateTime.now().format(DateTimeFormatter.ofPattern("MM/dd HH:mm:ss"));
+                ch.sendMessage(msg).queue(null, err -> log.debug("boot notify send failed: {}", err.toString()));
+            }
         } catch (Exception e) {
             log.error("Discord bot startup failed: {}", e.toString());
         }
@@ -89,7 +101,8 @@ public class DiscordBotService extends ListenerAdapter {
                                 new OptionData(OptionType.STRING, "시간", "HH:mm 또는 MM/dd HH:mm", true),
                                 new OptionData(OptionType.STRING, "메모", "선택", false)
                         ),
-                Commands.slash("레이드목록", "다가오는 레이드 목록을 봅니다")
+                Commands.slash("레이드목록", "예정 레이드 목록 · 참가자 상세"),
+                Commands.slash("레이드결과", "최근 완료 레이드 2건 · 참가자·득템·정산")
         ).queue();
     }
 
@@ -111,6 +124,7 @@ public class DiscordBotService extends ListenerAdapter {
             switch (e.getName()) {
                 case "레이드등록" -> handleCreateRaid(e);
                 case "레이드목록" -> handleListRaid(e);
+                case "레이드결과" -> handleRaidResults(e);
             }
         } catch (Exception ex) {
             log.warn("Slash command failed: {}", ex.toString());
@@ -119,15 +133,21 @@ public class DiscordBotService extends ListenerAdapter {
     }
 
     private void handleCreateRaid(SlashCommandInteractionEvent e) {
+        if (!isMasterByDiscord(e.getUser().getId())) {
+            e.reply("문주(부문주)만 레이드 등록 가능합니다. Discord ID 가 문파원에 연결돼있는지 확인해주세요.")
+                    .setEphemeral(true).queue();
+            return;
+        }
         String targetName = e.getOption("대상").getAsString();
         String timeStr = e.getOption("시간").getAsString();
         String memo = e.getOption("메모") != null ? e.getOption("메모").getAsString() : null;
 
-        RaidTarget target = targetRepository.findByName(targetName).orElse(null);
-        if (target == null) {
+        var parsed = resolveTargetOrCategory(targetName);
+        if (parsed == null) {
             List<String> known = targetRepository.findAll().stream().map(RaidTarget::getName).toList();
-            e.reply("대상 '" + targetName + "'을 찾을 수 없습니다. 등록된 대상: " + known)
-                    .setEphemeral(true).queue();
+            e.reply("대상 '" + targetName + "' 을 찾을 수 없습니다.\n"
+                    + "등록된 대상: " + known + "\n"
+                    + "또는 카테고리 키워드: '해골왕' / '어금니' / '용' / '룡'").setEphemeral(true).queue();
             return;
         }
         LocalDateTime when;
@@ -137,10 +157,113 @@ public class DiscordBotService extends ListenerAdapter {
             e.reply("시간 형식이 잘못됐습니다. HH:mm 또는 MM/dd HH:mm").setEphemeral(true).queue();
             return;
         }
-        var raid = raidService.create(new RaidDto.CreateRequest(target.getCategory(), target.getId(), when, memo));
-        e.reply("레이드 등록됨: " + target.getName() + " " + when.format(DateTimeFormatter.ofPattern("MM/dd HH:mm")))
+        var raid = raidService.create(new RaidDto.CreateRequest(
+                parsed.category(),
+                parsed.target() != null ? parsed.target().getId() : null,
+                when, memo));
+        String label = parsed.target() != null ? parsed.target().getName()
+                : (parsed.category() == RaidCategory.FANG ? "🐲 어금니 레이드" : "레이드");
+        e.reply("레이드 등록됨: " + label + " · " + when.format(DateTimeFormatter.ofPattern("MM/dd HH:mm")))
                 .setEphemeral(true).queue();
         DiscordNotifier n = notifier(); if (n != null) n.notifyRaidCreated(raid.getId());
+    }
+
+    private void handleRaidResults(SlashCommandInteractionEvent e) {
+        var done = raidRepository.findAllByOrderByScheduledAtDesc().stream()
+                .filter(r -> r.getStatus() == com.wind.guild.domain.RaidStatus.DONE)
+                .limit(2)
+                .toList();
+        if (done.isEmpty()) {
+            e.reply("완료된 레이드가 아직 없습니다").setEphemeral(true).queue();
+            return;
+        }
+        java.util.Set<Long> mids = new java.util.HashSet<>();
+        for (var r : done) attendeeRepository.findByRaidId(r.getId())
+                .forEach(a -> mids.add(a.getMemberId()));
+        java.util.Map<Long, String> nickMap = memberRepositoryFindAllById(mids);
+
+        StringBuilder sb = new StringBuilder("📊 **최근 완료 레이드** ").append(done.size()).append("건\n\n");
+        for (var r : done) {
+            String label = r.getTarget() != null ? r.getTarget().getName()
+                    : (r.getCategory() == RaidCategory.FANG ? "🐲 어금니 레이드" : "레이드");
+            sb.append("── ").append(label).append(" · ")
+                    .append(r.getScheduledAt().format(DateTimeFormatter.ofPattern("MM/dd(E) HH:mm")))
+                    .append(" ──\n");
+
+            var attendees = attendeeRepository.findByRaidId(r.getId()).stream()
+                    .map(a -> nickMap.getOrDefault(a.getMemberId(), "#" + a.getMemberId())).toList();
+            if (!attendees.isEmpty()) {
+                sb.append("🎯 참가확정 (").append(attendees.size()).append("): ")
+                        .append(String.join(", ", attendees)).append("\n");
+            }
+
+            var loots = lootRepository.findByRaidId(r.getId());
+            if (loots.isEmpty()) {
+                sb.append("💰 득템 없음\n\n");
+                continue;
+            }
+            long soldTotal = 0, unpaidTotal = 0, paidTotalAmt = 0;
+            int totalShares = 0, paidShares = 0;
+            sb.append("💰 득템 & 판매:\n");
+            for (var l : loots) {
+                var shares = shareRepository.findByLootId(l.getId());
+                int paid = (int) shares.stream().filter(com.wind.guild.domain.LootShare::isPaid).count();
+                totalShares += shares.size();
+                paidShares += paid;
+                String prefix = l.getTargetId() != null
+                        ? targetRepository.findById(l.getTargetId()).map(t -> t.getIcon() != null ? t.getIcon() + " " : "").orElse("")
+                        : "";
+                sb.append("  · ").append(prefix).append(l.getItemName());
+                if (l.getSoldPrice() != null) {
+                    sb.append(" · ").append(String.format("%,d", l.getSoldPrice())).append("전");
+                    soldTotal += l.getSoldPrice();
+                } else {
+                    sb.append(" · 미판매");
+                }
+                if (!shares.isEmpty()) sb.append(" (정산 ").append(paid).append("/").append(shares.size()).append(")");
+                sb.append("\n");
+                paidTotalAmt += shares.stream()
+                        .filter(com.wind.guild.domain.LootShare::isPaid)
+                        .mapToLong(com.wind.guild.domain.LootShare::getShare).sum();
+                unpaidTotal += shares.stream()
+                        .filter(s -> !s.isPaid())
+                        .mapToLong(com.wind.guild.domain.LootShare::getShare).sum();
+            }
+            sb.append("→ 판매 총액 ").append(String.format("%,d", soldTotal)).append("전")
+                    .append(" · 정산 ").append(paidShares).append("/").append(totalShares);
+            if (unpaidTotal > 0) {
+                sb.append(" · ⚠️ 미정산 ").append(String.format("%,d", unpaidTotal)).append("전");
+            }
+            sb.append("\n\n");
+        }
+        String out = sb.toString();
+        if (out.length() > 1900) out = out.substring(0, 1897) + "...";
+        e.reply(out).setEphemeral(true).queue();
+    }
+
+    private boolean isMasterByDiscord(String discordUserId) {
+        if (discordUserId == null) return false;
+        return memberRepository.findByDiscordUserId(discordUserId)
+                .map(m -> m.getRole() == com.wind.guild.domain.MemberRole.MASTER
+                        || m.getRole() == com.wind.guild.domain.MemberRole.VICE)
+                .orElse(false);
+    }
+
+    private record TargetParse(RaidTarget target, RaidCategory category) {}
+
+    private TargetParse resolveTargetOrCategory(String input) {
+        if (input == null) return null;
+        String s = input.trim();
+        if (s.equals("어금니") || s.equals("용") || s.equals("룡")) {
+            return new TargetParse(null, RaidCategory.FANG);
+        }
+        if (s.equals("해골") || s.equals("해골왕")) {
+            RaidTarget t = targetRepository.findByName("해골왕").orElse(null);
+            return new TargetParse(t, RaidCategory.SKULL_KING);
+        }
+        RaidTarget t = targetRepository.findByName(s).orElse(null);
+        if (t != null) return new TargetParse(t, t.getCategory());
+        return null;
     }
 
     private LocalDateTime parseWhen(String s) {
@@ -165,16 +288,51 @@ public class DiscordBotService extends ListenerAdapter {
     }
 
     private void handleListRaid(SlashCommandInteractionEvent e) {
-        var list = raidService.list();
-        if (list.isEmpty()) { e.reply("등록된 레이드가 없습니다").setEphemeral(true).queue(); return; }
+        var planned = raidService.list().stream()
+                .filter(v -> v.status() == com.wind.guild.domain.RaidStatus.PLANNED)
+                .sorted(java.util.Comparator.comparing(RaidDto.ListView::scheduledAt))
+                .toList();
+        if (planned.isEmpty()) { e.reply("예정 레이드가 없습니다").setEphemeral(true).queue(); return; }
+
+        // 참가확정 memberId → nickname 매핑
+        java.util.Set<Long> attendeeIds = new java.util.HashSet<>();
+        planned.forEach(v -> attendeeIds.addAll(v.attendees()));
+        java.util.Map<Long, String> nickMap = memberRepository != null
+                ? memberRepositoryFindAllById(attendeeIds)
+                : java.util.Map.of();
+
         StringBuilder sb = new StringBuilder();
-        list.stream().limit(10).forEach(v -> sb.append("• [")
-                .append(v.status()).append("] ")
-                .append(v.targetName()).append(" ")
-                .append(v.scheduledAt().format(DateTimeFormatter.ofPattern("MM/dd HH:mm")))
-                .append(" (✅").append(v.yesCount()).append(" ❌").append(v.noCount())
-                .append(" ❓").append(v.maybeCount()).append(")\n"));
-        e.reply(sb.toString()).setEphemeral(true).queue();
+        sb.append("🎯 **예정 레이드** ").append(planned.size()).append("건\n\n");
+        for (var v : planned) {
+            String label = v.targetName() != null ? v.targetName()
+                    : (v.category() == RaidCategory.FANG ? "🐲 어금니 레이드" : "레이드");
+            sb.append("── ").append(label).append(" · ")
+                    .append(v.scheduledAt().format(DateTimeFormatter.ofPattern("MM/dd(E) HH:mm")))
+                    .append("\n");
+
+            var yes = v.votes().stream().filter(x -> x.vote() == VoteType.YES).map(RaidDto.VoteView::nickname).toList();
+            var no = v.votes().stream().filter(x -> x.vote() == VoteType.NO).map(RaidDto.VoteView::nickname).toList();
+            var maybe = v.votes().stream().filter(x -> x.vote() == VoteType.MAYBE).map(RaidDto.VoteView::nickname).toList();
+            if (!yes.isEmpty()) sb.append("  ✅ 참가 (").append(yes.size()).append("): ").append(String.join(", ", yes)).append("\n");
+            if (!no.isEmpty()) sb.append("  ❌ 불참 (").append(no.size()).append("): ").append(String.join(", ", no)).append("\n");
+            if (!maybe.isEmpty()) sb.append("  ❓ 미정 (").append(maybe.size()).append("): ").append(String.join(", ", maybe)).append("\n");
+            if (!v.attendees().isEmpty()) {
+                var names = v.attendees().stream().map(id -> nickMap.getOrDefault(id, "#" + id)).toList();
+                sb.append("  🎯 참가확정 (").append(names.size()).append("): ").append(String.join(", ", names)).append("\n");
+            }
+            sb.append("\n");
+        }
+        String out = sb.toString();
+        if (out.length() > 1900) out = out.substring(0, 1897) + "...";
+        e.reply(out).setEphemeral(true).queue();
+    }
+
+    private java.util.Map<Long, String> memberRepositoryFindAllById(java.util.Set<Long> ids) {
+        if (ids.isEmpty()) return java.util.Map.of();
+        return memberRepository.findAllById(ids).stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        com.wind.guild.domain.Member::getId,
+                        com.wind.guild.domain.Member::getNickname));
     }
 
     @Override
@@ -227,6 +385,10 @@ public class DiscordBotService extends ListenerAdapter {
             if (target == null) return;
             LocalDateTime when = extractDateTime(raw);
             if (when == null) return;
+            if (!isMasterByDiscord(e.getAuthor().getId())) {
+                e.getMessage().reply("문주(부문주)만 레이드 등록 가능합니다").queue();
+                return;
+            }
             var raid = raidService.create(new RaidDto.CreateRequest(target.getCategory(), target.getId(), when, null));
             e.getMessage().reply("✅ 레이드 등록됨: " + target.getName() + " · "
                     + when.format(DateTimeFormatter.ofPattern("MM/dd HH:mm"))

@@ -8,8 +8,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -21,15 +24,40 @@ public class RaidService {
     private final RaidVoteRepository voteRepository;
     private final RaidAttendeeRepository attendeeRepository;
     private final MemberRepository memberRepository;
+    private final RaidLootRepository lootRepository;
+    private final LootShareRepository lootShareRepository;
+    private final RaidPartyRepository partyRepository;
+    private final RaidPartyMemberRepository partyMemberRepository;
 
     @Transactional(readOnly = true)
     public List<RaidDto.ListView> list() {
         List<Raid> raids = raidRepository.findAllByOrderByScheduledAtDesc();
-        return raids.stream().map(this::toListView).toList();
+        if (raids.isEmpty()) return List.of();
+
+        // 배치 조회: 모든 raid 의 vote/attendee + 닉네임
+        Map<Long, List<RaidVote>> votesByRaid = new HashMap<>();
+        Map<Long, List<Long>> attendeesByRaid = new HashMap<>();
+        Set<Long> refMemberIds = new HashSet<>();
+        for (Raid r : raids) {
+            List<RaidVote> vs = voteRepository.findByRaidId(r.getId());
+            votesByRaid.put(r.getId(), vs);
+            vs.forEach(v -> refMemberIds.add(v.getMemberId()));
+            List<Long> aids = attendeeRepository.findByRaidId(r.getId()).stream()
+                    .map(RaidAttendee::getMemberId).toList();
+            attendeesByRaid.put(r.getId(), aids);
+            refMemberIds.addAll(aids);
+        }
+        Map<Long, String> nickMap = memberRepository.findAllById(refMemberIds).stream()
+                .collect(Collectors.toMap(Member::getId, Member::getNickname));
+
+        return raids.stream().map(r -> toListView(r, votesByRaid, attendeesByRaid, nickMap)).toList();
     }
 
-    private RaidDto.ListView toListView(Raid r) {
-        List<RaidVote> votes = voteRepository.findByRaidId(r.getId());
+    private RaidDto.ListView toListView(Raid r,
+                                        Map<Long, List<RaidVote>> votesByRaid,
+                                        Map<Long, List<Long>> attendeesByRaid,
+                                        Map<Long, String> nickMap) {
+        List<RaidVote> votes = votesByRaid.getOrDefault(r.getId(), List.of());
         int y = 0, n = 0, m = 0;
         for (RaidVote v : votes) {
             switch (v.getVote()) {
@@ -38,6 +66,11 @@ public class RaidService {
                 case MAYBE -> m++;
             }
         }
+        List<RaidDto.VoteView> voteViews = votes.stream()
+                .map(v -> new RaidDto.VoteView(v.getMemberId(),
+                        nickMap.getOrDefault(v.getMemberId(), "?"),
+                        v.getVote(), v.getVotedAt()))
+                .toList();
         RaidTarget t = r.getTarget();
         return new RaidDto.ListView(
                 r.getId(),
@@ -46,7 +79,8 @@ public class RaidService {
                 t != null ? t.getName() : null,
                 t != null ? t.getIcon() : null,
                 t != null ? t.getDropItemName() : null,
-                r.getScheduledAt(), r.getStatus(), r.getMemo(), y, n, m);
+                r.getScheduledAt(), r.getStatus(), r.getMemo(), y, n, m,
+                voteViews, attendeesByRaid.getOrDefault(r.getId(), List.of()));
     }
 
     @Transactional(readOnly = true)
@@ -112,6 +146,15 @@ public class RaidService {
     }
 
     public void delete(Long id) {
+        // 정산·득템·파티(멤버포함)·투표·참가확정 모두 cascade 삭제
+        for (RaidLoot l : lootRepository.findByRaidId(id)) {
+            lootShareRepository.deleteByLootId(l.getId());
+        }
+        lootRepository.deleteByRaidId(id);
+        for (RaidParty p : partyRepository.findByRaidIdOrderByDisplayOrderAsc(id)) {
+            partyMemberRepository.deleteByPartyId(p.getId());
+        }
+        partyRepository.deleteByRaidId(id);
         voteRepository.deleteByRaidId(id);
         attendeeRepository.deleteByRaidId(id);
         raidRepository.deleteById(id);

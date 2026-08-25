@@ -41,9 +41,12 @@ public class LootDto {
 
     public record MarkPaidRequest(@NotNull Long shareId, boolean paid) {}
 
+    public record UpdateShareAmountRequest(@NotNull @Min(0) Long amount) {}
+
     public record BulkDropEntry(
             @NotNull Long targetId,
-            @NotNull @Min(1) Integer quantity) {}
+            @NotNull @Min(1) Integer quantity,
+            Long unitPrice) {}
 
     public record BulkAddRequest(@NotNull List<BulkDropEntry> drops) {}
 }

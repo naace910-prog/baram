@@ -47,6 +47,8 @@ export interface RaidListItem {
   yesCount: number
   noCount: number
   maybeCount: number
+  votes: RaidVote[]
+  attendees: number[]
 }
 
 export interface RaidVote {
@@ -96,6 +98,7 @@ export interface Loot {
 export interface BulkDropEntry {
   targetId: number
   quantity: number
+  unitPrice?: number | null
 }
 
 export interface StatsOverview {

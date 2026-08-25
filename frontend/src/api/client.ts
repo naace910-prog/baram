@@ -32,6 +32,8 @@ export const authApi = {
   me: () => http.get<AuthUser>('/auth/me').then((r) => r.data),
   changePassword: (currentPassword: string, newPassword: string) =>
     http.post('/auth/change-password', { currentPassword, newPassword }).then(() => true),
+  changeNickname: (nickname: string) =>
+    http.post<{ result: string; nickname: string }>('/auth/change-nickname', { nickname }).then((r) => r.data),
   discordAuthorizeUrl: () =>
     http.get<{ enabled: boolean; url?: string }>('/auth/discord/authorize-url').then((r) => r.data),
 }
@@ -128,4 +130,6 @@ export const lootApi = {
     http.post<Loot[]>(`/raids/${raidId}/loots/${lootId}/distribute`, { memberIds }).then((r) => r.data),
   markPaid: (raidId: number, lootId: number, shareId: number, paid: boolean) =>
     http.post<Loot[]>(`/raids/${raidId}/loots/${lootId}/shares/${shareId}/paid`, { shareId, paid }).then((r) => r.data),
+  updateShareAmount: (raidId: number, lootId: number, shareId: number, amount: number) =>
+    http.put<Loot[]>(`/raids/${raidId}/loots/${lootId}/shares/${shareId}`, { amount }).then((r) => r.data),
 }

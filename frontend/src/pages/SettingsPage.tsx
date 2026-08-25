@@ -1,9 +1,32 @@
-import { Alert, Button, Card, Space, Tag } from 'antd'
-import { BellOutlined, BellFilled } from '@ant-design/icons'
+import { Alert, Button, Card, Input, Space, Tag, App as AntApp, Form } from 'antd'
+import { BellOutlined, BellFilled, UserOutlined } from '@ant-design/icons'
+import { useState } from 'react'
 import { usePush } from '@/hooks/usePush'
+import { useAuth } from '@/store/authStore'
+import { authApi } from '@/api/client'
 
 export default function SettingsPage() {
   const { ready, status, enable, disable } = usePush()
+  const { user, fetchMe } = useAuth()
+  const { message } = AntApp.useApp()
+  const [nickname, setNickname] = useState(user?.nickname ?? '')
+  const [saving, setSaving] = useState(false)
+
+  const saveNickname = async () => {
+    const trimmed = nickname.trim()
+    if (!trimmed) { message.warning('닉네임 입력'); return }
+    if (trimmed === user?.nickname) return
+    setSaving(true)
+    try {
+      await authApi.changeNickname(trimmed)
+      await fetchMe()
+      message.success('닉네임 변경 완료')
+    } catch (e: any) {
+      message.error(e?.response?.data?.error ?? '변경 실패')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <>
@@ -11,10 +34,41 @@ export default function SettingsPage() {
         <h2 style={{ margin: 0 }}>설정</h2>
       </div>
 
-      <Card title="푸시 알림" style={{ marginBottom: 12 }}>
+      <Card title={<><UserOutlined /> 내 정보</>} style={{ marginBottom: 12 }}>
+        <Form layout="vertical" style={{ maxWidth: 400 }}>
+          <Form.Item label="계정" style={{ marginBottom: 12 }}>
+            <Input value={user?.account ?? ''} disabled />
+          </Form.Item>
+          <Form.Item label="역할" style={{ marginBottom: 12 }}>
+            <Tag color={user?.role === 'MASTER' ? 'red' : user?.role === 'VICE' ? 'orange' : 'default'}>
+              {user?.role === 'MASTER' ? '문주' : user?.role === 'VICE' ? '부문주' : '일반'}
+            </Tag>
+          </Form.Item>
+          <Form.Item label="닉네임" style={{ marginBottom: 8 }}>
+            <Space.Compact style={{ width: '100%' }}>
+              <Input
+                value={nickname}
+                onChange={(e) => setNickname(e.target.value)}
+                maxLength={40}
+                placeholder="채팅·투표·정산에 표시되는 이름"
+              />
+              <Button
+                type="primary"
+                onClick={saveNickname}
+                loading={saving}
+                disabled={!nickname.trim() || nickname.trim() === user?.nickname}
+              >
+                변경
+              </Button>
+            </Space.Compact>
+          </Form.Item>
+        </Form>
+      </Card>
+
+      <Card title={<><BellOutlined /> 푸시 알림</>} style={{ marginBottom: 12 }}>
         <div style={{ color: '#8c8c8c', fontSize: 13, marginBottom: 12 }}>
           레이드 등록, 30분 전 리마인더, 정산 완료 시 폰/PC 알림 팝업을 받을 수 있습니다.
-          Android/PC 는 브라우저에서 바로 되고, iPhone 은 **홈 화면에 추가** 로 앱처럼 설치한 뒤 가능합니다 (iOS 16.4+).
+          Android/PC 는 브라우저에서 바로 되고, iPhone 은 <b>홈 화면에 추가</b> 로 앱처럼 설치한 뒤 가능합니다 (iOS 16.4+).
         </div>
 
         {!ready && <div>로딩...</div>}

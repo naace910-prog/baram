@@ -84,12 +84,15 @@ public class LootService {
         for (LootDto.BulkDropEntry e : req.drops()) {
             RaidTarget t = targetRepository.findById(e.targetId())
                     .orElseThrow(() -> new IllegalArgumentException("대상 없음: " + e.targetId()));
+            Long unitPrice = (e.unitPrice() != null && e.unitPrice() > 0) ? e.unitPrice() : null;
             for (int i = 0; i < e.quantity(); i++) {
                 lootRepository.save(RaidLoot.builder()
                         .raidId(raidId)
                         .targetId(t.getId())
                         .itemName(t.getDropItemName())
                         .dropped(true)
+                        .soldPrice(unitPrice)
+                        .soldAt(unitPrice != null ? LocalDateTime.now() : null)
                         .build());
                 created++;
             }
@@ -132,5 +135,12 @@ public class LootService {
                 .orElseThrow(() -> new IllegalArgumentException("분배 없음: " + shareId));
         s.setPaid(paid);
         s.setPaidAt(paid ? LocalDateTime.now() : null);
+    }
+
+    public void updateShareAmount(Long shareId, long amount) {
+        if (amount < 0) throw new IllegalArgumentException("금액은 0 이상이어야 합니다");
+        LootShare s = shareRepository.findById(shareId)
+                .orElseThrow(() -> new IllegalArgumentException("분배 없음: " + shareId));
+        s.setShare(amount);
     }
 }

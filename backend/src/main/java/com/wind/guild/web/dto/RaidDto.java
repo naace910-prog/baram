@@ -41,7 +41,9 @@ public class RaidDto {
             String memo,
             int yesCount,
             int noCount,
-            int maybeCount) {}
+            int maybeCount,
+            List<VoteView> votes,
+            List<Long> attendees) {}
 
     public record DetailView(
             Long id,

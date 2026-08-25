@@ -18,4 +18,6 @@ public class AuthDto {
     public record ChangePasswordRequest(
             @NotBlank String currentPassword,
             @NotBlank String newPassword) {}
+
+    public record ChangeNicknameRequest(@NotBlank String nickname) {}
 }

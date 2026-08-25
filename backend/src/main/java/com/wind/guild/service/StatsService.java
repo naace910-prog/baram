@@ -65,7 +65,10 @@ public class StatsService {
         memberStats.sort(Comparator.comparingLong(StatsDto.MemberStat::totalShare).reversed());
 
         Map<Long, List<Raid>> raidsByTarget = new HashMap<>();
-        for (Raid r : raids) raidsByTarget.computeIfAbsent(r.getTarget().getId(), k -> new ArrayList<>()).add(r);
+        for (Raid r : raids) {
+            if (r.getTarget() == null) continue;   // 어금니 (target 없음) 은 target 별 통계에서 제외
+            raidsByTarget.computeIfAbsent(r.getTarget().getId(), k -> new ArrayList<>()).add(r);
+        }
         Map<Long, List<RaidLoot>> lootsByRaid = new HashMap<>();
         for (RaidLoot l : loots) lootsByRaid.computeIfAbsent(l.getRaidId(), k -> new ArrayList<>()).add(l);
 

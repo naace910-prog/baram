@@ -11,4 +11,5 @@ public interface RaidRepository extends JpaRepository<Raid, Long> {
     List<Raid> findAllByOrderByScheduledAtDesc();
     List<Raid> findByStatusOrderByScheduledAtAsc(RaidStatus status);
     List<Raid> findByStatusAndPre30SentFalseAndScheduledAtBetween(RaidStatus status, LocalDateTime from, LocalDateTime to);
+    List<Raid> findByStatusAndScheduledAtBetween(RaidStatus status, LocalDateTime from, LocalDateTime to);
 }

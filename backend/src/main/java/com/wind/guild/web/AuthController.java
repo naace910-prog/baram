@@ -61,6 +61,18 @@ public class AuthController {
         return ResponseEntity.ok(Map.of("result", "ok"));
     }
 
+    @PostMapping("/change-nickname")
+    public ResponseEntity<Map<String, String>> changeNickname(
+            @Valid @RequestBody AuthDto.ChangeNicknameRequest req,
+            HttpSession session) {
+        Long id = (Long) session.getAttribute(SessionKeys.MEMBER_ID);
+        if (id == null) return ResponseEntity.status(401).build();
+        String updated = memberService.changeNickname(id, req.nickname());
+        // 세션 닉네임도 즉시 갱신
+        session.setAttribute(SessionKeys.MEMBER_NICKNAME, updated);
+        return ResponseEntity.ok(Map.of("result", "ok", "nickname", updated));
+    }
+
     @GetMapping("/discord/authorize-url")
     public Map<String, Object> discordAuthorizeUrl() {
         if (!discordOAuth.isConfigured()) {

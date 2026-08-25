@@ -68,4 +68,14 @@ public class MemberService {
         }
         m.setPassword(passwordEncoder.encode(newPassword));
     }
+
+    public String changeNickname(Long id, String newNickname) {
+        Member m = memberRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("문파원 없음: " + id));
+        String trimmed = newNickname == null ? "" : newNickname.trim();
+        if (trimmed.isEmpty()) throw new IllegalArgumentException("닉네임을 입력해주세요");
+        if (trimmed.length() > 40) throw new IllegalArgumentException("닉네임은 40자 이내로 입력해주세요");
+        m.setNickname(trimmed);
+        return trimmed;
+    }
 }
