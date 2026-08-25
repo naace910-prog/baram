@@ -23,6 +23,7 @@ export default function LoginPage() {
   const discordError = params.get('discordError')
   const discordId = params.get('discordId')
   const discordName = params.get('discordName')
+  const discordDetail = params.get('detail')
 
   useEffect(() => { if (user) nav('/', { replace: true }) }, [user, nav])
 
@@ -70,7 +71,13 @@ export default function LoginPage() {
           <Alert type="error" showIcon message="비활성 계정입니다. 문주에게 문의하세요." style={{ marginBottom: 12 }} />
         )}
         {discordError && !['NOT_REGISTERED', 'INACTIVE'].includes(discordError) && (
-          <Alert type="error" showIcon message={`디스코드 로그인 실패: ${discordError}`} style={{ marginBottom: 12 }} />
+          <Alert
+            type="error"
+            showIcon
+            message={`디스코드 로그인 실패: ${discordError}`}
+            description={discordDetail ? <div style={{ wordBreak: 'break-all' }}><b>상세:</b> {discordDetail}</div> : undefined}
+            style={{ marginBottom: 12 }}
+          />
         )}
 
         {discordEnabled && discordUrl ? (
