@@ -1,5 +1,6 @@
 package com.wind.guild.web;
 
+import com.wind.guild.service.DiscordNotifier;
 import com.wind.guild.service.LootService;
 import com.wind.guild.web.dto.LootDto;
 import jakarta.validation.Valid;
@@ -15,6 +16,7 @@ import java.util.List;
 public class LootController {
 
     private final LootService lootService;
+    private final DiscordNotifier discord;
 
     @GetMapping
     public List<LootDto.LootView> list(@PathVariable Long raidId) {
@@ -45,6 +47,8 @@ public class LootController {
     public List<LootDto.LootView> distribute(@PathVariable Long raidId, @PathVariable Long lootId,
                                              @Valid @RequestBody LootDto.DistributeRequest req) {
         lootService.distribute(lootId, req.memberIds());
+        discord.syncLootCard(lootId, DiscordNotifier.LootTrigger.DISTRIBUTED);
+        discord.syncRaidCard(raidId, DiscordNotifier.RaidTrigger.VOTE);
         return lootService.listByRaid(raidId);
     }
 
@@ -54,6 +58,8 @@ public class LootController {
                                            @PathVariable Long shareId,
                                            @RequestBody LootDto.MarkPaidRequest req) {
         lootService.markPaid(shareId, req.paid());
+        discord.syncLootCard(lootId, DiscordNotifier.LootTrigger.PAID_CHANGED);
+        discord.syncRaidCard(raidId, DiscordNotifier.RaidTrigger.VOTE);
         return lootService.listByRaid(raidId);
     }
 }

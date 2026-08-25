@@ -31,4 +31,7 @@ public class RaidLoot {
 
     @Column(length = 300)
     private String memo;
+
+    @Column
+    private Long discordMessageId;
 }
