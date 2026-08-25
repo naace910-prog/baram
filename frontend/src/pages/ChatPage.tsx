@@ -1,9 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { Alert, Avatar, Badge, Button, Card, Input, Space, Tag, App as AntApp } from 'antd'
-import { SendOutlined, WifiOutlined, DisconnectOutlined } from '@ant-design/icons'
+import { Alert, Avatar, Button, Card, Input, Space, Tag, App as AntApp, Tooltip } from 'antd'
+import { SendOutlined, WifiOutlined, DisconnectOutlined, CopyOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
+import { useNavigate } from 'react-router-dom'
 import { useChat } from '@/hooks/useChat'
-import type { ChatMessage } from '@/types'
+import { raidApi } from '@/api/client'
+import type { ChatMessage, VoteType } from '@/types'
 import { useAuth } from '@/store/authStore'
 
 const DISCORD_COLOR = '#5865F2'
@@ -13,6 +15,7 @@ export default function ChatPage() {
   const { messages, connected, send } = useChat()
   const { user } = useAuth()
   const { message: toast } = AntApp.useApp()
+  const nav = useNavigate()
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -48,14 +51,32 @@ export default function ChatPage() {
     }
   }
 
+  const copyText = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      toast.success('복사됨')
+    } catch {
+      toast.error('클립보드 접근 실패')
+    }
+  }
+
+  const vote = async (raidId: number, v: VoteType) => {
+    try {
+      await raidApi.vote(raidId, v)
+      toast.success(`투표: ${v === 'YES' ? '참가' : v === 'NO' ? '불참' : '미정'}`)
+    } catch (e: any) {
+      toast.error(e?.response?.data?.error ?? '투표 실패')
+    }
+  }
+
   return (
     <>
       <div className="page-header">
         <Space>
           <h2 style={{ margin: 0 }}>문파 채팅</h2>
           {connected
-            ? <Tag icon={<WifiOutlined />} color="green">실시간 연결됨</Tag>
-            : <Tag icon={<DisconnectOutlined />} color="orange">재연결 중 (폴링)</Tag>}
+            ? <Tag icon={<WifiOutlined />} color="green">실시간</Tag>
+            : <Tag icon={<DisconnectOutlined />} color="orange">재연결 중</Tag>}
         </Space>
       </div>
 
@@ -71,10 +92,12 @@ export default function ChatPage() {
           }}
         >
           {messages.length === 0 && (
-            <Alert type="info" showIcon message="아직 메시지가 없습니다. 첫 메시지를 남겨보세요." />
+            <Alert type="info" showIcon message="아직 메시지가 없습니다." />
           )}
           {messages.map((m) => (
-            <MessageBubble key={m.id} msg={m} isMe={m.authorMemberId === user?.memberId} />
+            m.origin === 'SYSTEM'
+              ? <SystemMessage key={m.id} msg={m} onCopy={copyText} onVote={vote} onNav={(u) => nav(u)} />
+              : <MessageBubble key={m.id} msg={m} isMe={m.authorMemberId === user?.memberId} onCopy={copyText} />
           ))}
           <div ref={bottomRef} />
         </div>
@@ -94,7 +117,7 @@ export default function ChatPage() {
             onPressEnter={(e) => {
               if (!e.shiftKey) { e.preventDefault(); handleSend() }
             }}
-            placeholder="메시지 입력 (Enter 전송, Shift+Enter 줄바꿈)"
+            placeholder="메시지 (Enter 전송, Shift+Enter 줄바꿈)"
             autoSize={{ minRows: 1, maxRows: 4 }}
             maxLength={2000}
             disabled={sending}
@@ -108,7 +131,45 @@ export default function ChatPage() {
   )
 }
 
-function MessageBubble({ msg, isMe }: { msg: ChatMessage; isMe: boolean }) {
+function SystemMessage({ msg, onCopy, onVote, onNav }: {
+  msg: ChatMessage
+  onCopy: (t: string) => void
+  onVote: (raidId: number, v: VoteType) => void
+  onNav: (url: string) => void
+}) {
+  const raidId = msg.actionType === 'RAID_VOTE' ? msg.actionRefId ?? undefined : undefined
+  return (
+    <div style={{ display: 'flex', justifyContent: 'center', margin: '4px 0' }}>
+      <div
+        style={{
+          background: '#fff', border: '1px dashed #d9d9d9', borderRadius: 8,
+          padding: '8px 12px', maxWidth: '90%', color: '#595959', fontSize: 13,
+          whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+        }}
+      >
+        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+          <div style={{ flex: 1 }}>{msg.content}</div>
+          <Tooltip title="복사">
+            <Button type="text" size="small" icon={<CopyOutlined />} onClick={() => onCopy(msg.content)} />
+          </Tooltip>
+        </div>
+        {raidId != null && (
+          <Space wrap size={4} style={{ marginTop: 6 }}>
+            <Button size="small" type="primary" onClick={() => onVote(raidId, 'YES')}>✅ 참가</Button>
+            <Button size="small" danger onClick={() => onVote(raidId, 'NO')}>❌ 불참</Button>
+            <Button size="small" onClick={() => onVote(raidId, 'MAYBE')}>❓ 미정</Button>
+            <Button size="small" type="link" onClick={() => onNav(`/raids/${raidId}`)}>상세보기 →</Button>
+          </Space>
+        )}
+        <div style={{ fontSize: 10, color: '#bfbfbf', marginTop: 4, textAlign: 'right' }}>
+          {dayjs(msg.createdAt).format('HH:mm')}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function MessageBubble({ msg, isMe, onCopy }: { msg: ChatMessage; isMe: boolean; onCopy: (t: string) => void }) {
   const fromDiscord = msg.origin === 'DISCORD'
   const badge = fromDiscord
     ? <Tag color={DISCORD_COLOR} style={{ margin: 0, fontSize: 10, padding: '0 4px' }}>Discord</Tag>
@@ -127,15 +188,20 @@ function MessageBubble({ msg, isMe }: { msg: ChatMessage; isMe: boolean }) {
           {badge}
           <span style={{ marginLeft: 6 }}>{dayjs(msg.createdAt).format('HH:mm')}</span>
         </div>
-        <div
-          style={{
-            background: bg, color,
-            padding: '6px 10px', borderRadius: 12,
-            whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 14,
-            border: !isMe ? '1px solid #f0f0f0' : 'none',
-          }}
-        >
-          {msg.content}
+        <div style={{ display: 'flex', gap: 4, alignItems: 'flex-start', flexDirection: isMe ? 'row-reverse' : 'row' }}>
+          <div
+            style={{
+              background: bg, color,
+              padding: '6px 10px', borderRadius: 12,
+              whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 14,
+              border: !isMe ? '1px solid #f0f0f0' : 'none',
+            }}
+          >
+            {msg.content}
+          </div>
+          <Tooltip title="복사">
+            <Button type="text" size="small" icon={<CopyOutlined />} onClick={() => onCopy(msg.content)} />
+          </Tooltip>
         </div>
       </div>
     </div>

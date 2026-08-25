@@ -37,6 +37,12 @@ public class ChatMessage {
     @Column
     private Long discordMessageId;
 
+    @Column(length = 30)
+    private String actionType;
+
+    @Column
+    private Long actionRefId;
+
     @Column(nullable = false)
     private LocalDateTime createdAt;
 

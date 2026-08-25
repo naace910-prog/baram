@@ -50,6 +50,23 @@ public class ChatService {
         return view;
     }
 
+    public ChatDto.MessageView saveSystem(String content) {
+        return saveSystem(content, null, null);
+    }
+
+    public ChatDto.MessageView saveSystem(String content, String actionType, Long actionRefId) {
+        ChatMessage m = repo.save(ChatMessage.builder()
+                .content(content.length() > 2000 ? content.substring(0, 2000) : content)
+                .authorNickname("시스템")
+                .origin(ChatOrigin.SYSTEM)
+                .actionType(actionType)
+                .actionRefId(actionRefId)
+                .build());
+        ChatDto.MessageView view = ChatDto.MessageView.of(m);
+        broadcaster.broadcast(view);
+        return view;
+    }
+
     public ChatDto.MessageView saveFromDiscord(String content, String discordUserId, String nickname, Long discordMessageId) {
         if (discordMessageId != null && repo.existsByDiscordMessageId(discordMessageId)) {
             return null;

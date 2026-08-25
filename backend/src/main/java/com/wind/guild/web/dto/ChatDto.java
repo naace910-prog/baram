@@ -16,13 +16,17 @@ public class ChatDto {
             String authorDiscordId,
             String authorNickname,
             ChatOrigin origin,
+            String actionType,
+            Long actionRefId,
             LocalDateTime createdAt
     ) {
         public static MessageView of(ChatMessage m) {
             return new MessageView(
                     m.getId(), m.getContent(),
                     m.getAuthorMemberId(), m.getAuthorDiscordId(),
-                    m.getAuthorNickname(), m.getOrigin(), m.getCreatedAt());
+                    m.getAuthorNickname(), m.getOrigin(),
+                    m.getActionType(), m.getActionRefId(),
+                    m.getCreatedAt());
         }
     }
 

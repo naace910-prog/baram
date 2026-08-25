@@ -159,7 +159,7 @@ export interface PartyMemberEntry {
   freeName?: string | null
 }
 
-export type ChatOrigin = 'SITE' | 'DISCORD'
+export type ChatOrigin = 'SITE' | 'DISCORD' | 'SYSTEM'
 
 export interface ChatMessage {
   id: number
@@ -168,5 +168,7 @@ export interface ChatMessage {
   authorDiscordId?: string | null
   authorNickname: string
   origin: ChatOrigin
+  actionType?: string | null
+  actionRefId?: number | null
   createdAt: string
 }

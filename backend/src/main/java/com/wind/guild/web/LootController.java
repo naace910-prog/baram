@@ -1,6 +1,9 @@
 package com.wind.guild.web;
 
 import com.wind.guild.repository.LootShareRepository;
+import com.wind.guild.repository.MemberRepository;
+import com.wind.guild.repository.RaidLootRepository;
+import com.wind.guild.service.ChatService;
 import com.wind.guild.service.DiscordNotifier;
 import com.wind.guild.service.LootService;
 import com.wind.guild.service.WebPushService;
@@ -22,6 +25,9 @@ public class LootController {
     private final DiscordNotifier discord;
     private final WebPushService push;
     private final LootShareRepository shareRepo;
+    private final RaidLootRepository lootRepo;
+    private final MemberRepository memberRepo;
+    private final ChatService chat;
     private static final DecimalFormat MONEY = new DecimalFormat("#,###");
 
     @GetMapping
@@ -55,6 +61,14 @@ public class LootController {
         lootService.distribute(lootId, req.memberIds());
         discord.syncLootCard(lootId, DiscordNotifier.LootTrigger.DISTRIBUTED);
         discord.syncRaidCard(raidId, DiscordNotifier.RaidTrigger.VOTE);
+        try {
+            var loot = lootRepo.findById(lootId).orElse(null);
+            if (loot != null && loot.getSoldPrice() != null) {
+                long per = loot.getSoldPrice() / Math.max(1, req.memberIds().size());
+                chat.saveSystem("💰 " + loot.getItemName() + " " + MONEY.format(loot.getSoldPrice()) + "전 분배 "
+                        + "· " + req.memberIds().size() + "명 · 1인 " + MONEY.format(per) + "전");
+            }
+        } catch (Exception ignored) {}
         return lootService.listByRaid(raidId);
     }
 
@@ -66,13 +80,15 @@ public class LootController {
         lootService.markPaid(shareId, req.paid());
         discord.syncLootCard(lootId, DiscordNotifier.LootTrigger.PAID_CHANGED);
         discord.syncRaidCard(raidId, DiscordNotifier.RaidTrigger.VOTE);
-        // 정산 완료 됐으면 본인에게 push
         if (req.paid()) {
-            shareRepo.findById(shareId).ifPresent(s -> push.sendToMember(
-                    s.getMemberId(),
-                    "💰 정산 완료",
-                    MONEY.format(s.getShare()) + "전 정산되었습니다",
-                    "/raids/" + raidId));
+            shareRepo.findById(shareId).ifPresent(s -> {
+                push.sendToMember(s.getMemberId(),
+                        "💰 정산 완료",
+                        MONEY.format(s.getShare()) + "전 정산되었습니다",
+                        "/raids/" + raidId);
+                String nick = memberRepo.findById(s.getMemberId()).map(m -> m.getNickname()).orElse("?");
+                chat.saveSystem("💵 정산 완료: " + nick + " · " + MONEY.format(s.getShare()) + "전");
+            });
         }
         return lootService.listByRaid(raidId);
     }
