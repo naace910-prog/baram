@@ -117,6 +117,7 @@ public class RaidService {
         raidRepository.findById(raidId)
                 .orElseThrow(() -> new IllegalArgumentException("레이드 없음: " + raidId));
         attendeeRepository.deleteByRaidId(raidId);
+        attendeeRepository.flush();
         for (Long mid : memberIds) {
             attendeeRepository.save(RaidAttendee.builder()
                     .raidId(raidId).memberId(mid).build());

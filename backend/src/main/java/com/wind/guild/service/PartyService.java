@@ -103,6 +103,7 @@ public class PartyService {
     public PartyDto.PartyView replaceMembers(Long partyId, PartyDto.MembersReplaceRequest req) {
         RaidParty p = partyRepo.findById(partyId).orElseThrow(() -> new IllegalArgumentException("파티 없음: " + partyId));
         memberRepo.deleteByPartyId(partyId);
+        memberRepo.flush();
         Map<String, Integer> orderPerRole = new HashMap<>();
         for (PartyDto.MemberEntry e : req.members()) {
             if ((e.memberId() == null) && (e.freeName() == null || e.freeName().isBlank())) {
@@ -132,6 +133,7 @@ public class PartyService {
             }
         }
         attendeeRepo.deleteByRaidId(raidId);
+        attendeeRepo.flush();  // insert 전에 delete 실행 확정 (unique 제약 충돌 방지)
         for (Long mid : distinctIds) {
             attendeeRepo.save(RaidAttendee.builder().raidId(raidId).memberId(mid).build());
         }

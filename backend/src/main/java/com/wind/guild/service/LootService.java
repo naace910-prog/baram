@@ -79,6 +79,7 @@ public class LootService {
             throw new IllegalArgumentException("분배 대상 문파원이 없습니다");
         }
         shareRepository.deleteByLootId(lootId);
+        shareRepository.flush();  // insert 전에 delete 확정
         long total = l.getSoldPrice();
         long per = total / memberIds.size();
         long remainder = total - per * memberIds.size();
