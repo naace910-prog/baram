@@ -6,11 +6,14 @@ import dayjs from 'dayjs'
 import { raidApi } from '@/api/client'
 import { useAuth, isMaster } from '@/store/authStore'
 import { PlusOutlined } from '@ant-design/icons'
-import type { RaidStatus } from '@/types'
+import type { RaidCategory, RaidStatus } from '@/types'
+import { CATEGORY_LABEL } from '@/types'
 
 const statusColor: Record<RaidStatus, string> = {
   PLANNED: 'blue', DONE: 'green', CANCELLED: 'default',
 }
+
+const categoryIcon: Record<RaidCategory, string> = { SKULL_KING: '💀', FANG: '🐲' }
 
 export default function RaidListPage() {
   const nav = useNavigate()
@@ -57,11 +60,14 @@ export default function RaidListPage() {
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
               <div>
                 <div style={{ fontSize: 16, fontWeight: 600 }}>
-                  <Tag color="purple">{r.targetIcon ?? '🎯'} {r.targetName}</Tag>
+                  <Tag color="purple">
+                    {r.category ? `${categoryIcon[r.category]} ${CATEGORY_LABEL[r.category]}` : (r.targetIcon ?? '🎯')}
+                    {r.category === 'SKULL_KING' || r.targetName ? ` · ${r.targetName ?? ''}` : ''}
+                  </Tag>
                   <Tag color={statusColor[r.status]}>{r.status}</Tag>
                   {dayjs(r.scheduledAt).format('MM/DD(dd) HH:mm')}
                 </div>
-                <div style={{ color: '#666', marginTop: 4 }}>드랍: {r.dropItemName}</div>
+                {r.dropItemName && <div style={{ color: '#666', marginTop: 4 }}>드랍: {r.dropItemName}</div>}
                 {r.memo && <div style={{ color: '#999', marginTop: 4 }}>{r.memo}</div>}
               </div>
               <div style={{ textAlign: 'right' }}>

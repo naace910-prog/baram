@@ -1,6 +1,12 @@
 export type MemberRole = 'MASTER' | 'VICE' | 'MEMBER'
 export type RaidStatus = 'PLANNED' | 'DONE' | 'CANCELLED'
 export type VoteType = 'YES' | 'NO' | 'MAYBE'
+export type RaidCategory = 'SKULL_KING' | 'FANG'
+
+export const CATEGORY_LABEL: Record<RaidCategory, string> = {
+  SKULL_KING: '해골왕',
+  FANG: '어금니',
+}
 
 export interface AuthUser {
   memberId: number
@@ -24,15 +30,17 @@ export interface RaidTarget {
   name: string
   dropItemName: string
   icon?: string | null
+  category?: RaidCategory | null
   memo?: string | null
 }
 
 export interface RaidListItem {
   id: number
-  targetId: number
-  targetName: string
+  category?: RaidCategory | null
+  targetId?: number | null
+  targetName?: string | null
   targetIcon?: string | null
-  dropItemName: string
+  dropItemName?: string | null
   scheduledAt: string
   status: RaidStatus
   memo?: string | null
@@ -50,10 +58,11 @@ export interface RaidVote {
 
 export interface RaidDetail {
   id: number
-  targetId: number
-  targetName: string
+  category?: RaidCategory | null
+  targetId?: number | null
+  targetName?: string | null
   targetIcon?: string | null
-  dropItemName: string
+  dropItemName?: string | null
   scheduledAt: string
   status: RaidStatus
   memo?: string | null
@@ -73,12 +82,20 @@ export interface LootShare {
 export interface Loot {
   id: number
   raidId: number
+  targetId?: number | null
+  targetName?: string | null
+  targetIcon?: string | null
   itemName: string
   dropped: boolean
   soldPrice?: number | null
   soldAt?: string | null
   memo?: string | null
   shares: LootShare[]
+}
+
+export interface BulkDropEntry {
+  targetId: number
+  quantity: number
 }
 
 export interface StatsOverview {

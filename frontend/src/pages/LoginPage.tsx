@@ -7,6 +7,7 @@ import { authApi } from '@/api/client'
 const LS_ACCOUNT = 'wg.lastAccount'
 const LS_PW = 'wg.lastPw'
 const LS_REMEMBER_PW = 'wg.rememberPw'
+const APP_VERSION = 'v1.0.0'
 
 function readSaved() {
   try {
@@ -184,6 +185,8 @@ export default function LoginPage() {
 
         <p style={{ marginTop: 12, fontSize: 12, color: '#999', textAlign: 'center' }}>
           문파원이 아닌 경우 문주에게 등록 요청하세요
+          <br />
+          <span style={{ fontSize: 10, color: '#bfbfbf' }}>{APP_VERSION}</span>
         </p>
       </Card>
     </div>

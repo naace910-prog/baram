@@ -55,15 +55,23 @@ public class DataInitializer implements CommandLineRunner {
             log.info("레이드 대상 5마리 시드 완료");
         }
 
-        // 마이그레이션: 기존 target 에 카테고리 채우기 (이름 기반)
+        // 마이그레이션: 기존 target 에 카테고리·아이콘 채우기 (이름 기반)
+        java.util.Map<String, String> defaultIcons = java.util.Map.of(
+                "해골왕", "💀", "흑룡", "🐲", "감룡", "🦎", "묵룡", "🐉", "진룡", "🦖");
         int migrated = 0;
         for (RaidTarget t : raidTargetRepository.findAll()) {
+            boolean changed = false;
             if (t.getCategory() == null) {
                 t.setCategory("해골왕".equals(t.getName()) ? RaidCategory.SKULL_KING : RaidCategory.FANG);
-                migrated++;
+                changed = true;
             }
+            if ((t.getIcon() == null || t.getIcon().isBlank()) && defaultIcons.containsKey(t.getName())) {
+                t.setIcon(defaultIcons.get(t.getName()));
+                changed = true;
+            }
+            if (changed) migrated++;
         }
-        if (migrated > 0) log.info("기존 레이드 대상 {}개에 카테고리 자동 채워넣기 완료", migrated);
+        if (migrated > 0) log.info("기존 레이드 대상 {}개에 카테고리·아이콘 자동 채워넣기 완료", migrated);
 
         // 마이그레이션: 기존 raid 에 카테고리 채우기 (target 의 카테고리 참조)
         int raidMigrated = 0;

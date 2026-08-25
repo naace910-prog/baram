@@ -1,8 +1,11 @@
-import { Button, Card, Table, Space, Modal, Form, Input, App as AntApp } from 'antd'
+import { Button, Card, Table, Space, Modal, Form, Input, App as AntApp, Select, Tag } from 'antd'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { targetApi } from '@/api/client'
-import type { RaidTarget } from '@/types'
+import type { RaidTarget, RaidCategory } from '@/types'
+import { CATEGORY_LABEL } from '@/types'
+
+const categoryColor: Record<RaidCategory, string> = { SKULL_KING: 'red', FANG: 'purple' }
 import { PlusOutlined } from '@ant-design/icons'
 
 export default function TargetManagePage() {
@@ -25,6 +28,8 @@ export default function TargetManagePage() {
           columns={[
             { title: '아이콘', dataIndex: 'icon', width: 80, align: 'center', render: (v: string) => v || '-' },
             { title: '이름', dataIndex: 'name', width: 140 },
+            { title: '분류', dataIndex: 'category', width: 110,
+              render: (c: RaidCategory) => c ? <Tag color={categoryColor[c]}>{CATEGORY_LABEL[c]}</Tag> : '-' },
             { title: '드랍 아이템', dataIndex: 'dropItemName', width: 200 },
             { title: '메모', dataIndex: 'memo' },
             {
@@ -63,7 +68,10 @@ function TargetEditModal({
   const { message } = AntApp.useApp()
   useEffect(() => {
     if (!open) return
-    if (target) form.setFieldsValue({ name: target.name, dropItemName: target.dropItemName, icon: target.icon, memo: target.memo })
+    if (target) form.setFieldsValue({
+      name: target.name, dropItemName: target.dropItemName, icon: target.icon,
+      category: target.category, memo: target.memo,
+    })
     else form.resetFields()
   }, [open, target, form])
 
@@ -79,10 +87,16 @@ function TargetEditModal({
         onSaved(); onClose()
       }}
     >
-      <Form form={form} layout="vertical">
+      <Form form={form} layout="vertical" initialValues={{ category: 'FANG' }}>
         <Form.Item name="name" label="이름" rules={[{ required: true }]}><Input /></Form.Item>
         <Form.Item name="icon" label="아이콘 (이모지 1~2자, 선택)">
           <Input maxLength={8} placeholder="예: 💀 🐲 🦖" />
+        </Form.Item>
+        <Form.Item name="category" label="분류" rules={[{ required: true }]}>
+          <Select options={[
+            { value: 'SKULL_KING', label: '해골왕 (단독 킬 · 뼈 드랍)' },
+            { value: 'FANG', label: '어금니 (룡 종류 · 어금니 드랍)' },
+          ]} />
         </Form.Item>
         <Form.Item name="dropItemName" label="드랍 아이템" rules={[{ required: true }]}><Input /></Form.Item>
         <Form.Item name="memo" label="메모"><Input.TextArea rows={2} maxLength={400} /></Form.Item>

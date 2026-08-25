@@ -2,7 +2,7 @@ import axios from 'axios'
 import { message } from 'antd'
 import type {
   AuthUser, Member, RaidTarget, RaidListItem, RaidDetail, Loot, VoteType, RaidStatus, MemberRole, StatsResult,
-  PartyRole, PartyView, PartyMemberEntry, ChannelType, ChatMessage
+  PartyRole, PartyView, PartyMemberEntry, ChannelType, ChatMessage, RaidCategory, BulkDropEntry
 } from '@/types'
 
 export const http = axios.create({
@@ -49,9 +49,9 @@ export const memberApi = {
 
 export const targetApi = {
   list: () => http.get<RaidTarget[]>('/targets').then((r) => r.data),
-  create: (body: { name: string; dropItemName: string; memo?: string }) =>
+  create: (body: { name: string; dropItemName: string; icon?: string; category?: RaidCategory; memo?: string }) =>
     http.post<RaidTarget>('/targets', body).then((r) => r.data),
-  update: (id: number, body: { name: string; dropItemName: string; memo?: string }) =>
+  update: (id: number, body: { name: string; dropItemName: string; icon?: string; category?: RaidCategory; memo?: string }) =>
     http.put<RaidTarget>(`/targets/${id}`, body).then((r) => r.data),
   delete: (id: number) => http.delete(`/targets/${id}`).then(() => true),
 }
@@ -59,9 +59,9 @@ export const targetApi = {
 export const raidApi = {
   list: () => http.get<RaidListItem[]>('/raids').then((r) => r.data),
   get: (id: number) => http.get<RaidDetail>(`/raids/${id}`).then((r) => r.data),
-  create: (body: { targetId: number; scheduledAt: string; memo?: string }) =>
+  create: (body: { category: RaidCategory; targetId?: number; scheduledAt: string; memo?: string }) =>
     http.post<RaidDetail>('/raids', body).then((r) => r.data),
-  update: (id: number, body: { targetId: number; scheduledAt: string; status: RaidStatus; memo?: string }) =>
+  update: (id: number, body: { category?: RaidCategory; targetId?: number; scheduledAt: string; status: RaidStatus; memo?: string }) =>
     http.put<RaidDetail>(`/raids/${id}`, body).then((r) => r.data),
   delete: (id: number) => http.delete(`/raids/${id}`).then(() => true),
   vote: (id: number, vote: VoteType) =>
@@ -116,9 +116,11 @@ export const partyApi = {
 
 export const lootApi = {
   list: (raidId: number) => http.get<Loot[]>(`/raids/${raidId}/loots`).then((r) => r.data),
-  create: (raidId: number, body: { itemName: string; dropped: boolean; soldPrice?: number; memo?: string }) =>
+  create: (raidId: number, body: { targetId?: number; itemName: string; dropped: boolean; soldPrice?: number; memo?: string }) =>
     http.post<Loot[]>(`/raids/${raidId}/loots`, body).then((r) => r.data),
-  update: (raidId: number, lootId: number, body: { itemName: string; dropped: boolean; soldPrice?: number; memo?: string }) =>
+  bulkAdd: (raidId: number, drops: BulkDropEntry[]) =>
+    http.post<Loot[]>(`/raids/${raidId}/loots/bulk`, { drops }).then((r) => r.data),
+  update: (raidId: number, lootId: number, body: { targetId?: number; itemName: string; dropped: boolean; soldPrice?: number; memo?: string }) =>
     http.put<Loot[]>(`/raids/${raidId}/loots/${lootId}`, body).then((r) => r.data),
   delete: (raidId: number, lootId: number) =>
     http.delete<Loot[]>(`/raids/${raidId}/loots/${lootId}`).then((r) => r.data),

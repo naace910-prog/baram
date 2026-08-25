@@ -6,9 +6,10 @@ import {
 } from 'antd'
 import dayjs from 'dayjs'
 import { useEffect, useState } from 'react'
-import { raidApi, lootApi, memberApi } from '@/api/client'
+import { raidApi, lootApi, memberApi, targetApi } from '@/api/client'
 import { useAuth, isMaster } from '@/store/authStore'
-import type { VoteType, Loot, RaidStatus, Member } from '@/types'
+import type { VoteType, Loot, RaidStatus, Member, RaidTarget, BulkDropEntry } from '@/types'
+import { CATEGORY_LABEL } from '@/types'
 
 const statusColor: Record<RaidStatus, string> = {
   PLANNED: 'blue', DONE: 'green', CANCELLED: 'default',
@@ -25,11 +26,13 @@ export default function RaidDetailPage() {
   const { data: raid } = useQuery({ queryKey: ['raid', raidId], queryFn: () => raidApi.get(raidId) })
   const { data: loots = [] } = useQuery({ queryKey: ['loots', raidId], queryFn: () => lootApi.list(raidId) })
   const { data: members = [] } = useQuery({ queryKey: ['members'], queryFn: () => memberApi.list(false) })
+  const { data: targets = [] } = useQuery({ queryKey: ['targets'], queryFn: targetApi.list })
 
   const [lootModal, setLootModal] = useState<{ open: boolean; loot?: Loot | null }>({ open: false })
   const [distModal, setDistModal] = useState<{ open: boolean; loot?: Loot | null; picked: number[] }>({
     open: false, picked: [],
   })
+  const [bulkModal, setBulkModal] = useState(false)
 
   if (!raid) return null
 
@@ -44,7 +47,11 @@ export default function RaidDetailPage() {
 
   const changeStatus = async (s: RaidStatus) => {
     await raidApi.update(raidId, {
-      targetId: raid.targetId, scheduledAt: raid.scheduledAt, status: s, memo: raid.memo ?? undefined,
+      category: raid.category ?? undefined,
+      targetId: raid.targetId ?? undefined,
+      scheduledAt: raid.scheduledAt,
+      status: s,
+      memo: raid.memo ?? undefined,
     })
     qc.invalidateQueries({ queryKey: ['raid', raidId] })
     qc.invalidateQueries({ queryKey: ['raids'] })
@@ -73,10 +80,16 @@ export default function RaidDetailPage() {
 
       <Card>
         <Descriptions column={{ xs: 1, md: 2 }} bordered size="small">
-          <Descriptions.Item label="대상">
-            <Tag color="purple">{raid.targetIcon ?? '🎯'} {raid.targetName}</Tag>
+          <Descriptions.Item label="분류">
+            <Tag color={raid.category === 'SKULL_KING' ? 'red' : 'purple'}>
+              {raid.category === 'SKULL_KING' ? '💀 해골왕' : '🐲 어금니'}
+            </Tag>
           </Descriptions.Item>
-          <Descriptions.Item label="드랍">{raid.dropItemName}</Descriptions.Item>
+          <Descriptions.Item label="대상">
+            {raid.targetName ? <Tag color="purple">{raid.targetIcon ?? '🎯'} {raid.targetName}</Tag>
+              : <span style={{ color: '#8c8c8c' }}>다종 (득템별 개별 몹)</span>}
+          </Descriptions.Item>
+          <Descriptions.Item label="드랍">{raid.dropItemName ?? (raid.category === 'FANG' ? '흑/묵/감/진룡 어금니 · 드랍 시 등록' : '-')}</Descriptions.Item>
           <Descriptions.Item label="시간">{dayjs(raid.scheduledAt).format('YYYY-MM-DD(dd) HH:mm')}</Descriptions.Item>
           <Descriptions.Item label="상태">
             {isMaster(user) ? (
@@ -125,12 +138,17 @@ export default function RaidDetailPage() {
           title="득템·판매·분배"
           style={{ marginTop: 12 }}
           extra={
-            <Button
-              type="primary"
-              onClick={() => setLootModal({ open: true, loot: { id: 0, raidId, itemName: raid.dropItemName, dropped: true, soldPrice: null, memo: null, shares: [] } as any })}
-            >
-              득템 추가
-            </Button>
+            <Space>
+              {raid.category === 'FANG' && (
+                <Button onClick={() => setBulkModal(true)}>드랍 대량 입력</Button>
+              )}
+              <Button
+                type="primary"
+                onClick={() => setLootModal({ open: true, loot: { id: 0, raidId, itemName: raid.dropItemName ?? '', dropped: true, soldPrice: null, memo: null, shares: [], targetId: raid.targetId } as any })}
+              >
+                득템 추가
+              </Button>
+            </Space>
           }
         >
           {loots.length === 0 ? (
@@ -139,6 +157,7 @@ export default function RaidDetailPage() {
             loots.map((l) => (
               <Card key={l.id} type="inner" style={{ marginBottom: 8 }} title={
                 <Space>
+                  {l.targetIcon && <span>{l.targetIcon}</span>}
                   <span>{l.itemName}</span>
                   {l.dropped ? <Tag color="green">드랍</Tag> : <Tag>노드랍</Tag>}
                   {l.soldPrice != null && <Tag color="gold">{l.soldPrice.toLocaleString()}전</Tag>}
@@ -211,7 +230,65 @@ export default function RaidDetailPage() {
         onSaved={() => qc.invalidateQueries({ queryKey: ['loots', raidId] })}
         raidId={raidId}
       />
+
+      <BulkDropModal
+        open={bulkModal}
+        onClose={() => setBulkModal(false)}
+        targets={targets.filter(t => t.category === 'FANG')}
+        raidId={raidId}
+        onSaved={() => qc.invalidateQueries({ queryKey: ['loots', raidId] })}
+      />
     </>
+  )
+}
+
+function BulkDropModal({ open, onClose, targets, raidId, onSaved }: {
+  open: boolean; onClose: () => void; targets: RaidTarget[]; raidId: number
+  onSaved: () => void
+}) {
+  const { message } = AntApp.useApp()
+  const [qty, setQty] = useState<Record<number, number>>({})
+
+  useEffect(() => { if (open) setQty({}) }, [open])
+
+  const save = async () => {
+    const drops: BulkDropEntry[] = Object.entries(qty)
+      .map(([tid, q]) => ({ targetId: Number(tid), quantity: q }))
+      .filter(d => d.quantity > 0)
+    if (drops.length === 0) {
+      message.warning('수량을 하나 이상 입력해주세요')
+      return
+    }
+    await lootApi.bulkAdd(raidId, drops)
+    const total = drops.reduce((s, d) => s + d.quantity, 0)
+    message.success(`${total}개 득템 일괄 등록 완료`)
+    onSaved(); onClose()
+  }
+
+  return (
+    <Modal open={open} onCancel={onClose} onOk={save} title="드랍 대량 입력" okText="등록" destroyOnClose>
+      <div style={{ marginBottom: 12, color: '#8c8c8c', fontSize: 13 }}>
+        각 몹에서 몇 개씩 드랍했는지 입력. 개별 판매/분배는 이후 각 득템 카드에서.
+      </div>
+      <div style={{ display: 'grid', gap: 10 }}>
+        {targets.map(t => (
+          <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ fontSize: 24, width: 32, textAlign: 'center' }}>{t.icon ?? '🎯'}</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 600 }}>{t.name}</div>
+              <div style={{ fontSize: 12, color: '#8c8c8c' }}>{t.dropItemName}</div>
+            </div>
+            <InputNumber
+              min={0} max={99}
+              value={qty[t.id] ?? 0}
+              onChange={(v) => setQty(prev => ({ ...prev, [t.id]: Number(v) || 0 }))}
+              style={{ width: 90 }}
+              addonAfter="개"
+            />
+          </div>
+        ))}
+      </div>
+    </Modal>
   )
 }
 
