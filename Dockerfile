@@ -1,7 +1,7 @@
 # -------- Stage 1: 프론트 빌드 --------
-FROM node:20-alpine AS frontend
+# alpine(musl) + 대용량 node_modules 조합의 npm exit-handler 버그(#4028 계열) 회피 위해 slim(Debian glibc) 사용
+FROM node:20-slim AS frontend
 WORKDIR /app/frontend
-# node:20-alpine 내장 npm 10.8.2 의 "Exit handler never called!" 버그 회피 (Render 빌드 71s 지점 실패)
 RUN npm install -g npm@11.0.0
 ENV NODE_OPTIONS=--max-old-space-size=512
 COPY frontend/package*.json ./
