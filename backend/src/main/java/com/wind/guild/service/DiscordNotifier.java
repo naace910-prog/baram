@@ -121,17 +121,24 @@ public class DiscordNotifier {
                 .map(RaidAttendee::getMemberId).toList();
         Map<Long, String> nickMap = fetchNicks(attendeeIds);
 
+        RaidTarget t = r.getTarget();
+        String label = t != null ? t.getName()
+                : (r.getCategory() == RaidCategory.FANG ? "🐲 어금니 레이드"
+                    : r.getCategory() == RaidCategory.SKULL_KING ? "💀 해골왕" : "레이드");
+        String dropItemName = t != null ? t.getDropItemName()
+                : (r.getCategory() == RaidCategory.FANG ? "흑/묵/감/진룡 어금니 (드랍 시 등록)"
+                    : "-");
+
         StringBuilder desc = new StringBuilder();
-        desc.append("**🎯 ").append(r.getTarget().getName()).append("** · ")
-                .append(r.getTarget().getDropItemName()).append("\n")
+        desc.append("**🎯 ").append(label).append("** · ")
+                .append(dropItemName).append("\n")
                 .append("**📅 ").append(r.getScheduledAt().format(FMT)).append("**\n");
         if (r.getMemo() != null && !r.getMemo().isBlank()) {
             desc.append("💬 ").append(r.getMemo()).append("\n");
         }
 
-        RaidTarget t = r.getTarget();
         EmbedBuilder eb = new EmbedBuilder()
-                .setTitle(title + " · " + t.getName())
+                .setTitle(title + " · " + label)
                 .setColor(color)
                 .setDescription(desc.toString())
                 .addField("✅ 참가", String.valueOf(yes), true)
@@ -261,7 +268,16 @@ public class DiscordNotifier {
 
     private MessageEmbed buildLootEmbed(RaidLoot l, List<LootShare> shares) {
         Raid r = raidRepository.findById(l.getRaidId()).orElse(null);
-        String raidLabel = r != null ? r.getTarget().getName() : "레이드";
+        String raidLabel;
+        if (r == null) {
+            raidLabel = "레이드";
+        } else if (r.getTarget() != null) {
+            raidLabel = r.getTarget().getName();
+        } else if (r.getCategory() == RaidCategory.FANG) {
+            raidLabel = "어금니 레이드";
+        } else {
+            raidLabel = "레이드";
+        }
 
         long paid = shares.stream().filter(LootShare::isPaid).count();
         long total = shares.size();
@@ -326,10 +342,15 @@ public class DiscordNotifier {
             long no = votes.stream().filter(v -> v.getVote() == VoteType.NO).count();
             long maybe = votes.stream().filter(v -> v.getVote() == VoteType.MAYBE).count();
             String siteLink = props.getSiteBaseUrl() + "/raids/" + r.getId();
+            RaidTarget t = r.getTarget();
+            String label = t != null ? t.getName()
+                    : (r.getCategory() == RaidCategory.FANG ? "어금니 레이드" : "레이드");
+            String dropItemName = t != null ? t.getDropItemName()
+                    : (r.getCategory() == RaidCategory.FANG ? "흑/묵/감/진룡 어금니" : "-");
             Map<String, Object> embed = Map.of(
-                    "title", "🆕 새 레이드 · " + r.getTarget().getName(),
+                    "title", "🆕 새 레이드 · " + label,
                     "description", "시간: " + r.getScheduledAt().format(FMT)
-                            + "\n드랍: " + r.getTarget().getDropItemName()
+                            + "\n드랍: " + dropItemName
                             + (r.getMemo() == null || r.getMemo().isBlank() ? "" : "\n메모: " + r.getMemo())
                             + "\n\n✅ " + yes + " · ❌ " + no + " · ❓ " + maybe
                             + "\n\n[상세보기](" + siteLink + ")",

@@ -7,7 +7,7 @@ import { authApi } from '@/api/client'
 const LS_ACCOUNT = 'wg.lastAccount'
 const LS_PW = 'wg.lastPw'
 const LS_REMEMBER_PW = 'wg.rememberPw'
-const APP_VERSION = 'v1.0.5'
+const APP_VERSION = 'v1.0.6'
 
 function readSaved() {
   try {
