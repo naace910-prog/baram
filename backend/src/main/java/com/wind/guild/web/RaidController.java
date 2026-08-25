@@ -43,11 +43,21 @@ public class RaidController {
     public RaidDto.DetailView create(@Valid @RequestBody RaidDto.CreateRequest req) {
         Raid r = raidService.create(req);
         discord.syncRaidCard(r.getId(), DiscordNotifier.RaidTrigger.CREATED);
-        String icon = r.getTarget().getIcon() != null ? r.getTarget().getIcon() + " " : "";
+        String label;
+        String icon;
+        String dropItem;
+        if (r.getTarget() != null) {
+            label = r.getTarget().getName();
+            icon = r.getTarget().getIcon() != null ? r.getTarget().getIcon() + " " : "";
+            dropItem = r.getTarget().getDropItemName();
+        } else if (r.getCategory() == com.wind.guild.domain.RaidCategory.FANG) {
+            label = "어금니 레이드"; icon = "🐲 "; dropItem = "흑/묵/감/진룡 어금니";
+        } else {
+            label = "레이드"; icon = ""; dropItem = "";
+        }
         String time = r.getScheduledAt().format(DateTimeFormatter.ofPattern("MM/dd HH:mm"));
-        push.sendToAll("🆕 새 레이드: " + r.getTarget().getName(),
-                time + " · " + r.getTarget().getDropItemName(), "/raids/" + r.getId());
-        chat.saveSystem("🆕 새 레이드 등록: " + icon + r.getTarget().getName() + " · " + time
+        push.sendToAll("🆕 새 레이드: " + label, time + " · " + dropItem, "/raids/" + r.getId());
+        chat.saveSystem("🆕 새 레이드 등록: " + icon + label + " · " + time
                 + (r.getMemo() != null && !r.getMemo().isBlank() ? "\n💬 " + r.getMemo() : ""),
                 "RAID_VOTE", r.getId());
         return raidService.get(r.getId());
