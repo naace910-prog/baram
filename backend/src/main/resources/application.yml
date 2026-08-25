@@ -25,11 +25,17 @@ spring:
       enabled: ${H2_CONSOLE_ENABLED:true}
       path: /h2-console
 
+push:
+  vapid-public-key: ${VAPID_PUBLIC_KEY:}
+  vapid-private-key: ${VAPID_PRIVATE_KEY:}
+  subject: ${PUSH_SUBJECT:mailto:admin@example.com}
+
 discord:
   enabled: ${DISCORD_ENABLED:false}
   bot-token: ${DISCORD_BOT_TOKEN:}
   guild-id: ${DISCORD_GUILD_ID:}
   notify-channel-id: ${DISCORD_NOTIFY_CHANNEL_ID:}
+  chat-channel-id: ${DISCORD_CHAT_CHANNEL_ID:}
   webhook-url: ${DISCORD_WEBHOOK_URL:}
   site-base-url: ${SITE_BASE_URL:http://localhost:5173}
   client-id: ${DISCORD_CLIENT_ID:}

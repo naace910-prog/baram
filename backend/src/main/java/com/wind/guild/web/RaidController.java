@@ -4,7 +4,10 @@ import com.wind.guild.config.SessionKeys;
 import com.wind.guild.domain.Raid;
 import com.wind.guild.service.DiscordNotifier;
 import com.wind.guild.service.RaidService;
+import com.wind.guild.service.WebPushService;
 import com.wind.guild.web.dto.RaidDto;
+
+import java.time.format.DateTimeFormatter;
 import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +23,7 @@ public class RaidController {
 
     private final RaidService raidService;
     private final DiscordNotifier discord;
+    private final WebPushService push;
 
     @GetMapping
     public List<RaidDto.ListView> list() {
@@ -35,6 +39,10 @@ public class RaidController {
     public RaidDto.DetailView create(@Valid @RequestBody RaidDto.CreateRequest req) {
         Raid r = raidService.create(req);
         discord.syncRaidCard(r.getId(), DiscordNotifier.RaidTrigger.CREATED);
+        String title = "🆕 새 레이드: " + r.getTarget().getName();
+        String body = r.getScheduledAt().format(DateTimeFormatter.ofPattern("MM/dd HH:mm"))
+                + " · " + r.getTarget().getDropItemName();
+        push.sendToAll(title, body, "/raids/" + r.getId());
         return raidService.get(r.getId());
     }
 

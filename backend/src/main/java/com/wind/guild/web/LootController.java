@@ -1,13 +1,16 @@
 package com.wind.guild.web;
 
+import com.wind.guild.repository.LootShareRepository;
 import com.wind.guild.service.DiscordNotifier;
 import com.wind.guild.service.LootService;
+import com.wind.guild.service.WebPushService;
 import com.wind.guild.web.dto.LootDto;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.text.DecimalFormat;
 import java.util.List;
 
 @RestController
@@ -17,6 +20,9 @@ public class LootController {
 
     private final LootService lootService;
     private final DiscordNotifier discord;
+    private final WebPushService push;
+    private final LootShareRepository shareRepo;
+    private static final DecimalFormat MONEY = new DecimalFormat("#,###");
 
     @GetMapping
     public List<LootDto.LootView> list(@PathVariable Long raidId) {
@@ -60,6 +66,14 @@ public class LootController {
         lootService.markPaid(shareId, req.paid());
         discord.syncLootCard(lootId, DiscordNotifier.LootTrigger.PAID_CHANGED);
         discord.syncRaidCard(raidId, DiscordNotifier.RaidTrigger.VOTE);
+        // 정산 완료 됐으면 본인에게 push
+        if (req.paid()) {
+            shareRepo.findById(shareId).ifPresent(s -> push.sendToMember(
+                    s.getMemberId(),
+                    "💰 정산 완료",
+                    MONEY.format(s.getShare()) + "전 정산되었습니다",
+                    "/raids/" + raidId));
+        }
         return lootService.listByRaid(raidId);
     }
 }

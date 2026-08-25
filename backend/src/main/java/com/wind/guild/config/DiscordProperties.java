@@ -13,6 +13,7 @@ public class DiscordProperties {
     private String botToken;
     private String guildId;
     private String notifyChannelId;
+    private String chatChannelId;
     private String webhookUrl;
     private String siteBaseUrl;
     private String clientId;

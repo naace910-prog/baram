@@ -40,10 +40,12 @@ public class DiscordBotService extends ListenerAdapter {
     private final RaidTargetRepository targetRepository;
     private final RaidService raidService;
     private final ObjectProvider<DiscordNotifier> notifierProvider;
+    private final ObjectProvider<ChatService> chatServiceProvider;
 
     private JDA jda;
 
     private DiscordNotifier notifier() { return notifierProvider.getIfAvailable(); }
+    private ChatService chatService() { return chatServiceProvider.getIfAvailable(); }
 
     @PostConstruct
     public void start() {
@@ -96,6 +98,11 @@ public class DiscordBotService extends ListenerAdapter {
     public TextChannel notifyChannel() {
         if (!isReady() || props.getNotifyChannelId() == null || props.getNotifyChannelId().isBlank()) return null;
         return jda.getTextChannelById(props.getNotifyChannelId());
+    }
+
+    public TextChannel chatChannel() {
+        if (!isReady() || props.getChatChannelId() == null || props.getChatChannelId().isBlank()) return null;
+        return jda.getTextChannelById(props.getChatChannelId());
     }
 
     @Override
@@ -199,10 +206,20 @@ public class DiscordBotService extends ListenerAdapter {
     @Override
     public void onMessageReceived(MessageReceivedEvent e) {
         if (e.getAuthor().isBot()) return;
-        if (props.getNotifyChannelId() == null || props.getNotifyChannelId().isBlank()) return;
-        if (!e.getChannel().getId().equals(props.getNotifyChannelId())) return;
+        String channelId = e.getChannel().getId();
         String raw = e.getMessage().getContentRaw();
         if (raw == null || raw.isBlank()) return;
+
+        // 채팅 채널 메시지 → 사이트 채팅으로 브릿지
+        if (props.getChatChannelId() != null && !props.getChatChannelId().isBlank()
+                && channelId.equals(props.getChatChannelId())) {
+            handleChatChannelMessage(e, raw);
+            return;
+        }
+
+        // 알림 채널의 자연어 명령 파싱
+        if (props.getNotifyChannelId() == null || props.getNotifyChannelId().isBlank()) return;
+        if (!channelId.equals(props.getNotifyChannelId())) return;
         if (!raw.contains("등록") && !raw.contains("잡자") && !raw.contains("가자")) return;
 
         try {
@@ -218,6 +235,21 @@ public class DiscordBotService extends ListenerAdapter {
             if (n != null) n.notifyRaidCreated(raid.getId());
         } catch (Exception ex) {
             log.debug("자연어 파싱 실패 (무시): {}", ex.toString());
+        }
+    }
+
+    private void handleChatChannelMessage(MessageReceivedEvent e, String content) {
+        // "**닉네임** (사이트): ..." 형태는 우리가 relay 한 것이므로 다시 저장하지 않음
+        if (content.startsWith("**") && content.contains("(사이트):")) return;
+        try {
+            ChatService cs = chatService();
+            if (cs == null) return;
+            String nick = e.getMember() != null && e.getMember().getEffectiveName() != null
+                    ? e.getMember().getEffectiveName()
+                    : e.getAuthor().getName();
+            cs.saveFromDiscord(content, e.getAuthor().getId(), nick, e.getMessageIdLong());
+        } catch (Exception ex) {
+            log.debug("chat ingest 실패: {}", ex.toString());
         }
     }
 

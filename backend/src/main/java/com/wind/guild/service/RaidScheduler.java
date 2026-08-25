@@ -11,6 +11,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 @Slf4j
@@ -21,6 +22,7 @@ public class RaidScheduler {
 
     private final RaidRepository raidRepository;
     private final DiscordNotifier notifier;
+    private final WebPushService push;
 
     @Scheduled(fixedDelay = 60_000, initialDelay = 30_000)
     @Transactional
@@ -33,6 +35,10 @@ public class RaidScheduler {
         for (Raid r : ready) {
             try {
                 notifier.notifyRaidPre30(r.getId());
+                push.sendToAll(
+                        "⏰ 30분 뒤 시작: " + r.getTarget().getName(),
+                        r.getScheduledAt().format(DateTimeFormatter.ofPattern("MM/dd HH:mm")) + " · 곧 시작합니다",
+                        "/raids/" + r.getId());
                 r.setPre30Sent(true);
                 raidRepository.save(r);
             } catch (Exception e) {

@@ -2,7 +2,7 @@ import { Layout, Menu, Drawer, Button, Grid, Dropdown, Avatar } from 'antd'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useState } from 'react'
 import {
-  MenuOutlined, DashboardOutlined, ThunderboltOutlined, UserOutlined, AimOutlined, LogoutOutlined, BarChartOutlined, TeamOutlined
+  MenuOutlined, DashboardOutlined, ThunderboltOutlined, UserOutlined, AimOutlined, LogoutOutlined, BarChartOutlined, TeamOutlined, MessageOutlined, SettingOutlined
 } from '@ant-design/icons'
 import { useAuth, isMaster } from '@/store/authStore'
 
@@ -19,7 +19,9 @@ export default function AppLayout() {
   const items = [
     { key: '/', icon: <DashboardOutlined />, label: '대시보드' },
     { key: '/raids', icon: <ThunderboltOutlined />, label: '레이드' },
+    { key: '/chat', icon: <MessageOutlined />, label: '채팅' },
     { key: '/stats', icon: <BarChartOutlined />, label: '통계' },
+    { key: '/settings', icon: <SettingOutlined />, label: '설정' },
     ...(isMaster(user)
       ? [
           { key: '/members', icon: <UserOutlined />, label: '문파원' },

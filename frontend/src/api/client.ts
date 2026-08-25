@@ -2,7 +2,7 @@ import axios from 'axios'
 import { message } from 'antd'
 import type {
   AuthUser, Member, RaidTarget, RaidListItem, RaidDetail, Loot, VoteType, RaidStatus, MemberRole, StatsResult,
-  PartyRole, PartyView, PartyMemberEntry, ChannelType
+  PartyRole, PartyView, PartyMemberEntry, ChannelType, ChatMessage
 } from '@/types'
 
 export const http = axios.create({
@@ -72,6 +72,24 @@ export const raidApi = {
 
 export const statsApi = {
   get: () => http.get<StatsResult>('/stats').then((r) => r.data),
+}
+
+export const chatApi = {
+  recent: (limit = 100) =>
+    http.get<ChatMessage[]>('/chat/messages', { params: { limit } }).then((r) => r.data),
+  since: (since: number) =>
+    http.get<ChatMessage[]>('/chat/messages', { params: { since } }).then((r) => r.data),
+  send: (content: string) =>
+    http.post<ChatMessage>('/chat/messages', { content }).then((r) => r.data),
+}
+
+export const pushApi = {
+  vapidKey: () =>
+    http.get<{ enabled: boolean; publicKey: string }>('/push/vapid-key').then((r) => r.data),
+  subscribe: (body: { endpoint: string; p256dh: string; auth: string }) =>
+    http.post('/push/subscribe', body).then(() => true),
+  unsubscribe: (endpoint: string) =>
+    http.post('/push/unsubscribe', { endpoint }).then(() => true),
 }
 
 export const partyRoleApi = {
