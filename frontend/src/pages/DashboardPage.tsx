@@ -2,14 +2,17 @@ import { Card, Row, Col, Statistic, List, Tag, Button, Empty } from 'antd'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import dayjs from 'dayjs'
-import { raidApi } from '@/api/client'
+import { raidApi, statsApi } from '@/api/client'
 import { useAuth, isMaster } from '@/store/authStore'
-import { ThunderboltOutlined, PlusOutlined } from '@ant-design/icons'
+import { ThunderboltOutlined, PlusOutlined, WarningOutlined, DollarOutlined } from '@ant-design/icons'
+
+const fmt = (n: number) => n.toLocaleString('ko-KR')
 
 export default function DashboardPage() {
   const nav = useNavigate()
   const { user } = useAuth()
   const { data: raids = [] } = useQuery({ queryKey: ['raids'], queryFn: raidApi.list })
+  const { data: stats } = useQuery({ queryKey: ['stats'], queryFn: statsApi.get })
 
   const now = dayjs()
   const upcoming = raids
@@ -36,10 +39,36 @@ export default function DashboardPage() {
           <Card><Statistic title="완료 레이드" value={past.length} /></Card>
         </Col>
         <Col xs={12} md={6}>
-          <Card><Statistic title="총 레이드" value={raids.length} /></Card>
+          <Card
+            hoverable
+            onClick={() => nav('/stats')}
+            style={{ cursor: 'pointer' }}
+          >
+            <Statistic
+              title="총 판매금액"
+              value={stats?.overview?.totalRevenue ?? 0}
+              suffix="골"
+              prefix={<DollarOutlined />}
+              valueStyle={{ color: '#52c41a' }}
+              formatter={(v) => fmt(Number(v))}
+            />
+          </Card>
         </Col>
         <Col xs={12} md={6}>
-          <Card><Statistic title="내 계정" value={user?.nickname ?? '-'} /></Card>
+          <Card
+            hoverable
+            onClick={() => nav('/stats')}
+            style={{ cursor: 'pointer' }}
+          >
+            <Statistic
+              title="미정산 총액"
+              value={stats?.overview?.unpaidTotal ?? 0}
+              suffix="골"
+              prefix={<WarningOutlined />}
+              valueStyle={{ color: (stats?.overview?.unpaidTotal ?? 0) > 0 ? '#faad14' : '#8c8c8c' }}
+              formatter={(v) => fmt(Number(v))}
+            />
+          </Card>
         </Col>
       </Row>
 

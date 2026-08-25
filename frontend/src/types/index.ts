@@ -77,3 +77,35 @@ export interface Loot {
   memo?: string | null
   shares: LootShare[]
 }
+
+export interface StatsOverview {
+  totalMembers: number
+  plannedRaids: number
+  doneRaids: number
+  totalRevenue: number
+  unpaidTotal: number
+}
+
+export interface MemberStat {
+  memberId: number
+  nickname: string
+  attendCount: number
+  totalShare: number
+  unpaidShare: number
+  unpaidCount: number
+}
+
+export interface TargetStat {
+  targetId: number
+  name: string
+  dropItemName: string
+  killCount: number
+  totalSoldPrice: number
+  avgSoldPrice: number
+}
+
+export interface StatsResult {
+  overview: StatsOverview
+  members: MemberStat[]
+  targets: TargetStat[]
+}

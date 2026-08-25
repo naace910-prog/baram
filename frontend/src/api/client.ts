@@ -1,7 +1,7 @@
 import axios from 'axios'
 import { message } from 'antd'
 import type {
-  AuthUser, Member, RaidTarget, RaidListItem, RaidDetail, Loot, VoteType, RaidStatus, MemberRole
+  AuthUser, Member, RaidTarget, RaidListItem, RaidDetail, Loot, VoteType, RaidStatus, MemberRole, StatsResult
 } from '@/types'
 
 export const http = axios.create({
@@ -67,6 +67,10 @@ export const raidApi = {
     http.post<RaidDetail>(`/raids/${id}/votes`, { vote }).then((r) => r.data),
   setAttendees: (id: number, memberIds: number[]) =>
     http.put<RaidDetail>(`/raids/${id}/attendees`, { memberIds }).then((r) => r.data),
+}
+
+export const statsApi = {
+  get: () => http.get<StatsResult>('/stats').then((r) => r.data),
 }
 
 export const lootApi = {

@@ -45,12 +45,21 @@ export default function LoginPage() {
     <div
       style={{
         minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center',
-        padding: 16, background: 'linear-gradient(135deg, #1a103d 0%, #0d1a3a 100%)',
+        padding: 16,
+        background: 'radial-gradient(circle at 30% 20%, #2d1b5c 0%, #0d1128 60%, #050612 100%)',
       }}
     >
-      <Card style={{ width: '100%', maxWidth: 420 }}>
-        <h1 style={{ textAlign: 'center', margin: '0 0 4px', color: '#7c3aed' }}>바람클래식-개화</h1>
-        <p style={{ textAlign: 'center', margin: '0 0 20px', color: '#666' }}>문파 전용</p>
+      <Card
+        style={{ width: '100%', maxWidth: 420, boxShadow: '0 20px 60px rgba(0,0,0,0.5)' }}
+        styles={{ body: { padding: '32px 28px' } }}
+      >
+        <div style={{ textAlign: 'center', marginBottom: 24 }}>
+          <div style={{ fontSize: 48, lineHeight: 1, marginBottom: 8 }}>🌸</div>
+          <h1 style={{ margin: '0 0 4px', color: '#7c3aed', fontSize: 24, letterSpacing: '-0.5px' }}>
+            바람클래식 · 개화
+          </h1>
+          <p style={{ margin: 0, color: '#8c8c8c', fontSize: 13 }}>문파 전용 관리 시스템</p>
+        </div>
 
         {discordError === 'NOT_REGISTERED' && (
           <Alert

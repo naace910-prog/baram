@@ -1,17 +1,49 @@
-# 바람클래식-개화 문파 웹
+# 🌸 바람클래식-개화 문파 웹
 
-문파 전용 웹앱. React(모바일 반응형) + Spring Boot + H2 + Discord 봇/웹훅/OAuth.
+문파 전용 관리 시스템. React(모바일 반응형) + Spring Boot + PostgreSQL(운영) / H2(로컬) + Discord 봇/웹훅/OAuth.
+
+## 🚀 Live
+
+- **운영 URL**: https://wind-guild.onrender.com
+- **초기 문주 계정**: `master` / `1234` (로그인 후 반드시 변경)
+- **Discord 봇**: 개화알림봇 (문파 서버 · 알림채널)
+- **호스팅**: Render Free + Supabase Free + UptimeRobot Free (완전 무료 구성)
 
 ## 기능
 
-- **로그인**: Discord OAuth (권장) · 계정+비번(초기 세팅용)
+- **로그인**: Discord OAuth · 계정+비번(문주 초기 세팅용)
 - **레이드**: 등록·목록·상세, 예정/완료/취소 상태, 참가 투표(YES/NO/MAYBE)
 - **득템·분배**: 아이템 등록, 판매금액 입력, N분의 1 자동 계산, 개별 정산 체크
+- **통계 대시보드**: 총 판매금액 · 미정산 총액 · 문파원별 정산 현황 · 대상별 킬 수/평균 판매금액
 - **문파원 관리**: 문주가 추가(계정+역할+Discord ID), 비번 초기화, 활성/비활성
 - **대상 관리**: 해골왕/흑룡/감룡/묵룡/진룡 시드, 자유 추가
 - **Discord 알림**: 레이드 등록 시 즉시 + 30분 전 자동 알림 (임베드 카드)
 - **Discord 슬래시 커맨드**: `/레이드등록 대상 시간` · `/레이드목록`
 - **Discord 버튼 투표**: 알림 카드의 [참가]/[불참]/[미정] 버튼 → 사이트 안 열고 바로 투표
+
+## ⚠️ 프론트 코드 수정 시 필독
+
+Render Free 티어의 npm registry 연결이 71초 지점에 결정론적으로 stall 하는 이슈 때문에, **프론트는 로컬에서 빌드해서 dist 를 커밋** 하는 방식을 씁니다. Docker 안에서는 npm 을 아예 실행하지 않습니다.
+
+```bash
+# 프론트 코드(.tsx 등) 수정 후엔 반드시:
+cd frontend
+npm run build       # dist/ 생성 (약 20~30초)
+cd ..
+git add frontend/dist frontend/src   # dist 도 커밋 필수
+git commit -m "..."
+git push
+```
+
+**dist 재빌드를 잊으면** Render 에는 이전 프론트 상태로 배포됩니다. Spring 백엔드만 수정한 경우엔 npm 재빌드 불필요.
+
+## ⚠️ Discord 관련 주의사항
+
+- **봇 토큰/시크릿 은 절대 채팅/코드/커밋에 노출 금지**. 노출 즉시 Discord Portal 에서 **Reset**
+- Render Free 티어의 **공용 IP** 를 쓰기 때문에 다른 사용자가 같은 IP 로 Discord API 를 남용하면 우리 앱도 **글로벌 rate limit (429)** 에 걸릴 수 있음
+  - 증상: OAuth 로그인 시 `exchange_failed / 429 Too Many Requests`
+  - 조치: **30~60분 대기** (Discord 자동 해제). 재배포·재시도 반복은 오히려 대기 시간을 늘림
+- **재배포 최소화**: 환경변수 여러 개 바꿀 땐 한 번에 다 바꾸고 Save 한 번만 (Render 는 매 Save 마다 재배포 → 봇 재접속 → rate limit 위험)
 
 ## 로컬 개발 실행
 
