@@ -3,7 +3,7 @@ server:
   forward-headers-strategy: framework
   servlet:
     session:
-      timeout: 12h
+      timeout: 30d
   error:
     include-message: always
     include-binding-errors: always
@@ -24,6 +24,12 @@ spring:
     properties:
       hibernate:
         format_sql: true
+  session:
+    store-type: jdbc
+    timeout: 30d
+    jdbc:
+      initialize-schema: always
+      table-name: SPRING_SESSION
   h2:
     console:
       enabled: ${H2_CONSOLE_ENABLED:true}

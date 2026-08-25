@@ -159,8 +159,8 @@ export default function LoginPage() {
             layout="vertical"
             onFinish={onFinish}
             initialValues={{
-              account: saved.account || 'master',
-              password: saved.password || (saved.account ? '' : '1234'),
+              account: saved.account || '',
+              password: saved.password || '',
             }}
             autoComplete="on"
           >
@@ -183,7 +183,7 @@ export default function LoginPage() {
         )}
 
         <p style={{ marginTop: 12, fontSize: 12, color: '#999', textAlign: 'center' }}>
-          최초 문주 계정: <b>master / 1234</b> (로그인 후 즉시 변경 권장)
+          문파원이 아닌 경우 문주에게 등록 요청하세요
         </p>
       </Card>
     </div>
