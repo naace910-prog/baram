@@ -243,7 +243,7 @@ public class DiscordBotService extends ListenerAdapter {
         }
         String out = sb.toString();
         if (out.length() > 1900) out = out.substring(0, 1897) + "...";
-        e.reply(out).setEphemeral(true).queue();
+        e.getHook().sendMessage(out).setEphemeral(true).queue();
     }
 
     private void handleChangeNickname(SlashCommandInteractionEvent e) {
@@ -320,7 +320,7 @@ public class DiscordBotService extends ListenerAdapter {
                 .filter(v -> v.status() == com.wind.guild.domain.RaidStatus.PLANNED)
                 .sorted(java.util.Comparator.comparing(RaidDto.ListView::scheduledAt))
                 .toList();
-        if (planned.isEmpty()) { e.reply("예정 레이드가 없습니다").setEphemeral(true).queue(); return; }
+        if (planned.isEmpty()) { e.getHook().sendMessage("예정 레이드가 없습니다").setEphemeral(true).queue(); return; }
 
         // 참가확정 memberId → nickname 매핑
         java.util.Set<Long> attendeeIds = new java.util.HashSet<>();
@@ -352,7 +352,7 @@ public class DiscordBotService extends ListenerAdapter {
         }
         String out = sb.toString();
         if (out.length() > 1900) out = out.substring(0, 1897) + "...";
-        e.reply(out).setEphemeral(true).queue();
+        e.getHook().sendMessage(out).setEphemeral(true).queue();
     }
 
     private java.util.Map<Long, String> memberRepositoryFindAllById(java.util.Set<Long> ids) {
