@@ -32,17 +32,30 @@ public class DataInitializer implements CommandLineRunner {
     private final PasswordEncoder passwordEncoder;
     private final JdbcTemplate jdbc;
 
+    private void runSchemaFix(String label, String sql) {
+        try {
+            jdbc.execute(sql);
+            log.info("스키마 마이그레이션 [{}] 성공", label);
+        } catch (Exception e) {
+            log.debug("스키마 마이그레이션 [{}] 스킵 or 실패 (이미 반영): {}", label, e.toString());
+        }
+    }
+
     @Override
     @Transactional
     public void run(String... args) {
-        // 스키마 마이그레이션: Hibernate ddl-auto=update 는 컬럼 NOT NULL 해제 못 함
-        // 어금니 카테고리 raid 는 target_id 가 null 이어야 함
-        try {
-            jdbc.execute("ALTER TABLE raids ALTER COLUMN target_id DROP NOT NULL");
-            log.info("스키마 마이그레이션: raids.target_id NOT NULL 해제");
-        } catch (Exception e) {
-            log.debug("raids.target_id NOT NULL 해제 스킵 (이미 nullable): {}", e.toString());
-        }
+        // 스키마 마이그레이션: Hibernate ddl-auto=update 는 컬럼 NOT NULL 해제·CHECK 제약 업데이트 못 함
+        runSchemaFix("raids", "ALTER TABLE raids ALTER COLUMN target_id DROP NOT NULL");
+        // ChatOrigin enum 에 SYSTEM 추가 · 기존 CHECK 는 SITE/DISCORD 만 허용
+        runSchemaFix("chat_messages_origin_check",
+                "ALTER TABLE chat_messages DROP CONSTRAINT IF EXISTS chat_messages_origin_check");
+        // 다른 잠재적 CHECK 제약 (RaidCategory · ChannelType 등) 도 확장 대비 해제
+        runSchemaFix("raids_category_check",
+                "ALTER TABLE raids DROP CONSTRAINT IF EXISTS raids_category_check");
+        runSchemaFix("raid_targets_category_check",
+                "ALTER TABLE raid_targets DROP CONSTRAINT IF EXISTS raid_targets_category_check");
+        runSchemaFix("raid_parties_channel_type_check",
+                "ALTER TABLE raid_parties DROP CONSTRAINT IF EXISTS raid_parties_channel_type_check");
 
         if (memberRepository.count() == 0) {
             memberRepository.save(Member.builder()
