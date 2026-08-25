@@ -70,7 +70,7 @@ export default function ChatPage() {
   }
 
   return (
-    <>
+    <div style={{ maxWidth: 900, margin: '0 auto' }}>
       <div className="page-header">
         <Space>
           <h2 style={{ margin: 0 }}>문파 채팅</h2>
@@ -81,13 +81,13 @@ export default function ChatPage() {
       </div>
 
       <Card
-        styles={{ body: { padding: 0, display: 'flex', flexDirection: 'column', height: 'calc(100vh - 200px)', minHeight: 400 } }}
+        styles={{ body: { padding: 0, display: 'flex', flexDirection: 'column', height: 'calc(100vh - 200px)', minHeight: 400, position: 'relative' } }}
       >
         <div
           ref={scrollRef}
           style={{
             flex: 1, overflowY: 'auto', padding: 12,
-            display: 'flex', flexDirection: 'column', gap: 8,
+            display: 'flex', flexDirection: 'column', gap: 10,
             background: '#fafafa',
           }}
         >
@@ -103,8 +103,8 @@ export default function ChatPage() {
         </div>
 
         {!atBottom && (
-          <div style={{ position: 'absolute', right: 24, bottom: 80 }}>
-            <Button size="small" onClick={() => { setAtBottom(true); bottomRef.current?.scrollIntoView({ block: 'end' }) }}>
+          <div style={{ position: 'absolute', right: 16, bottom: 68, zIndex: 2 }}>
+            <Button size="small" shape="round" onClick={() => { setAtBottom(true); bottomRef.current?.scrollIntoView({ block: 'end' }) }}>
               최신으로 ↓
             </Button>
           </div>
@@ -127,7 +127,7 @@ export default function ChatPage() {
           </Button>
         </div>
       </Card>
-    </>
+    </div>
   )
 }
 
@@ -171,37 +171,67 @@ function SystemMessage({ msg, onCopy, onVote, onNav }: {
 
 function MessageBubble({ msg, isMe, onCopy }: { msg: ChatMessage; isMe: boolean; onCopy: (t: string) => void }) {
   const fromDiscord = msg.origin === 'DISCORD'
-  const badge = fromDiscord
-    ? <Tag color={DISCORD_COLOR} style={{ margin: 0, fontSize: 10, padding: '0 4px' }}>Discord</Tag>
-    : <Tag color={SITE_COLOR} style={{ margin: 0, fontSize: 10, padding: '0 4px' }}>사이트</Tag>
   const bg = isMe ? '#7c3aed' : (fromDiscord ? '#eef1ff' : '#fff')
-  const color = isMe ? '#fff' : '#000'
+  const color = isMe ? '#fff' : '#262626'
+  const border = !isMe ? '1px solid #e4e6eb' : 'none'
+  const originLabel = fromDiscord ? 'Discord' : '사이트'
+  const originColor = fromDiscord ? DISCORD_COLOR : SITE_COLOR
 
   return (
-    <div style={{ display: 'flex', flexDirection: isMe ? 'row-reverse' : 'row', gap: 8, alignItems: 'flex-start' }}>
-      <Avatar size="small" style={{ background: fromDiscord ? DISCORD_COLOR : SITE_COLOR, flexShrink: 0 }}>
+    <div style={{ display: 'flex', flexDirection: isMe ? 'row-reverse' : 'row', gap: 8, alignItems: 'flex-end', width: '100%' }}>
+      <Avatar size={32} style={{ background: originColor, flexShrink: 0 }}>
         {msg.authorNickname?.[0] ?? '?'}
       </Avatar>
-      <div style={{ maxWidth: '75%', display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
-        <div style={{ fontSize: 11, color: '#8c8c8c', marginBottom: 2 }}>
-          <span style={{ marginRight: 6, color: '#262626', fontWeight: 500 }}>{msg.authorNickname}</span>
-          {badge}
-          <span style={{ marginLeft: 6 }}>{dayjs(msg.createdAt).format('HH:mm')}</span>
+
+      <div style={{
+        display: 'flex', flexDirection: 'column',
+        alignItems: isMe ? 'flex-end' : 'flex-start',
+        maxWidth: 'calc(100% - 60px)', minWidth: 0,
+      }}>
+        {/* 이름 · 배지 (시간은 말풍선 옆으로 이동) */}
+        <div style={{
+          fontSize: 11, color: '#606770', marginBottom: 3,
+          display: 'flex', gap: 5, alignItems: 'center',
+          flexDirection: isMe ? 'row-reverse' : 'row',
+        }}>
+          <span style={{ color: '#050505', fontWeight: 600 }}>{msg.authorNickname}</span>
+          <span style={{
+            fontSize: 9, padding: '1px 5px', borderRadius: 4,
+            background: originColor + '20', color: originColor,
+          }}>{originLabel}</span>
         </div>
-        <div style={{ display: 'flex', gap: 4, alignItems: 'flex-start', flexDirection: isMe ? 'row-reverse' : 'row' }}>
-          <div
-            style={{
-              background: bg, color,
-              padding: '6px 10px', borderRadius: 12,
-              whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 14,
-              border: !isMe ? '1px solid #f0f0f0' : 'none',
-            }}
-          >
+
+        {/* 말풍선 · 시간 · 복사 */}
+        <div style={{
+          display: 'flex', alignItems: 'flex-end', gap: 6,
+          flexDirection: isMe ? 'row-reverse' : 'row',
+        }}>
+          <div style={{
+            background: bg, color, border,
+            padding: '8px 12px', borderRadius: 16,
+            borderBottomRightRadius: isMe ? 4 : 16,
+            borderBottomLeftRadius: !isMe ? 4 : 16,
+            whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 14,
+            lineHeight: 1.4, minWidth: 32,
+            boxShadow: isMe ? 'none' : '0 1px 2px rgba(0,0,0,0.05)',
+          }}>
             {msg.content}
           </div>
-          <Tooltip title="복사">
-            <Button type="text" size="small" icon={<CopyOutlined />} onClick={() => onCopy(msg.content)} />
-          </Tooltip>
+          <div style={{
+            display: 'flex', flexDirection: 'column',
+            alignItems: isMe ? 'flex-end' : 'flex-start',
+            gap: 2, fontSize: 10, color: '#8a8d91', flexShrink: 0,
+          }}>
+            <Tooltip title="복사">
+              <Button
+                type="text" size="small"
+                icon={<CopyOutlined style={{ fontSize: 12, color: '#8a8d91' }} />}
+                onClick={() => onCopy(msg.content)}
+                style={{ padding: 2, height: 'auto', minWidth: 'auto' }}
+              />
+            </Tooltip>
+            <span>{dayjs(msg.createdAt).format('HH:mm')}</span>
+          </div>
         </div>
       </div>
     </div>
