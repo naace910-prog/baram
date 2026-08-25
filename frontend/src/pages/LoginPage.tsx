@@ -61,6 +61,21 @@ export default function LoginPage() {
           <p style={{ margin: 0, color: '#8c8c8c', fontSize: 13 }}>문파 전용 관리 시스템</p>
         </div>
 
+        {discordError === 'NOT_GUILD_MEMBER' && (
+          <Alert
+            type="warning"
+            showIcon
+            style={{ marginBottom: 12 }}
+            message="문파 디스코드 서버 멤버가 아닙니다"
+            description={<div>
+              <div><b>{discordName}</b> 로 로그인 시도했습니다.</div>
+              <div style={{ marginTop: 6 }}>
+                이 사이트는 <b>바람클래식-개화 문파 디스코드 서버</b> 멤버만 이용할 수 있습니다.
+                먼저 문파 디스코드 서버에 참여한 뒤 다시 시도해주세요.
+              </div>
+            </div>}
+          />
+        )}
         {discordError === 'NOT_REGISTERED' && (
           <Alert
             type="warning"
@@ -79,7 +94,10 @@ export default function LoginPage() {
         {discordError === 'INACTIVE' && (
           <Alert type="error" showIcon message="비활성 계정입니다. 문주에게 문의하세요." style={{ marginBottom: 12 }} />
         )}
-        {discordError && !['NOT_REGISTERED', 'INACTIVE'].includes(discordError) && (
+        {discordError === 'GUILD_NOT_CONFIGURED' && (
+          <Alert type="error" showIcon message="서버 설정 오류: DISCORD_GUILD_ID 미설정. 문주에게 문의하세요." style={{ marginBottom: 12 }} />
+        )}
+        {discordError && !['NOT_GUILD_MEMBER', 'NOT_REGISTERED', 'INACTIVE', 'GUILD_NOT_CONFIGURED'].includes(discordError) && (
           <Alert
             type="error"
             showIcon
