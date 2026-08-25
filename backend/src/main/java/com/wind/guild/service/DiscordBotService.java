@@ -48,6 +48,14 @@ public class DiscordBotService extends ListenerAdapter {
             log.info("Discord bot is disabled (set DISCORD_ENABLED=true and DISCORD_BOT_TOKEN to enable).");
             return;
         }
+        // ⚠ 별도 스레드에서 초기화: JDA.awaitReady() 가 rate limit 등으로 오래 걸리면
+        // Spring Boot 부팅이 블록되어 Tomcat 이 포트에 바인딩되지 않는 버그 회피
+        Thread t = new Thread(this::connectInBackground, "discord-bot-init");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    private void connectInBackground() {
         try {
             jda = JDABuilder.createDefault(props.getBotToken(),
                             GatewayIntent.GUILD_MESSAGES,
