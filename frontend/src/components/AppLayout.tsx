@@ -2,7 +2,7 @@ import { Layout, Menu, Drawer, Button, Grid, Dropdown, Avatar } from 'antd'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useState } from 'react'
 import {
-  MenuOutlined, DashboardOutlined, ThunderboltOutlined, UserOutlined, AimOutlined, LogoutOutlined, BarChartOutlined
+  MenuOutlined, DashboardOutlined, ThunderboltOutlined, UserOutlined, AimOutlined, LogoutOutlined, BarChartOutlined, TeamOutlined
 } from '@ant-design/icons'
 import { useAuth, isMaster } from '@/store/authStore'
 
@@ -24,6 +24,7 @@ export default function AppLayout() {
       ? [
           { key: '/members', icon: <UserOutlined />, label: '문파원' },
           { key: '/targets', icon: <AimOutlined />, label: '대상' },
+          { key: '/party-roles', icon: <TeamOutlined />, label: '파티 역할' },
         ]
       : []),
   ]

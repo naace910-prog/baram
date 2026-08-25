@@ -1,7 +1,8 @@
 import axios from 'axios'
 import { message } from 'antd'
 import type {
-  AuthUser, Member, RaidTarget, RaidListItem, RaidDetail, Loot, VoteType, RaidStatus, MemberRole, StatsResult
+  AuthUser, Member, RaidTarget, RaidListItem, RaidDetail, Loot, VoteType, RaidStatus, MemberRole, StatsResult,
+  PartyRole, PartyView, PartyMemberEntry, ChannelType
 } from '@/types'
 
 export const http = axios.create({
@@ -71,6 +72,28 @@ export const raidApi = {
 
 export const statsApi = {
   get: () => http.get<StatsResult>('/stats').then((r) => r.data),
+}
+
+export const partyRoleApi = {
+  list: (includeInactive = false) =>
+    http.get<PartyRole[]>('/party-roles', { params: { includeInactive } }).then((r) => r.data),
+  create: (body: { name: string; icon?: string; displayOrder?: number; active?: boolean }) =>
+    http.post<PartyRole>('/party-roles', body).then((r) => r.data),
+  update: (id: number, body: { name: string; icon?: string; displayOrder?: number; active?: boolean }) =>
+    http.put<PartyRole>(`/party-roles/${id}`, body).then((r) => r.data),
+  delete: (id: number) => http.delete(`/party-roles/${id}`).then(() => true),
+}
+
+export const partyApi = {
+  list: (raidId: number) =>
+    http.get<PartyView[]>(`/raids/${raidId}/parties`).then((r) => r.data),
+  create: (raidId: number, body: { channelType: ChannelType; channelNumber?: number; memo?: string; mikeMemberId?: number; mikeFreeName?: string }) =>
+    http.post<PartyView>(`/raids/${raidId}/parties`, body).then((r) => r.data),
+  update: (partyId: number, body: { channelType: ChannelType; channelNumber?: number; memo?: string; mikeMemberId?: number; mikeFreeName?: string; displayOrder?: number }) =>
+    http.put<PartyView>(`/parties/${partyId}`, body).then((r) => r.data),
+  delete: (partyId: number) => http.delete(`/parties/${partyId}`).then(() => true),
+  replaceMembers: (partyId: number, members: PartyMemberEntry[]) =>
+    http.put<PartyView>(`/parties/${partyId}/members`, { members }).then((r) => r.data),
 }
 
 export const lootApi = {

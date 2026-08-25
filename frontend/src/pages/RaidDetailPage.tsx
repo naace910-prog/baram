@@ -66,6 +66,7 @@ export default function RaidDetailPage() {
       <div className="page-header">
         <h2 style={{ margin: 0 }}>레이드 상세</h2>
         <Space>
+          <Button onClick={() => nav(`/raids/${raidId}/parties`)}>파티 편성</Button>
           {isMaster(user) && <Button danger onClick={removeRaid}>삭제</Button>}
         </Space>
       </div>
@@ -140,7 +141,7 @@ export default function RaidDetailPage() {
                 <Space>
                   <span>{l.itemName}</span>
                   {l.dropped ? <Tag color="green">드랍</Tag> : <Tag>노드랍</Tag>}
-                  {l.soldPrice != null && <Tag color="gold">{l.soldPrice.toLocaleString()}골드</Tag>}
+                  {l.soldPrice != null && <Tag color="gold">{l.soldPrice.toLocaleString()}전</Tag>}
                 </Space>
               } extra={
                 <Space>
@@ -170,7 +171,7 @@ export default function RaidDetailPage() {
                     dataSource={l.shares}
                     columns={[
                       { title: '문파원', dataIndex: 'nickname' },
-                      { title: '분배액', dataIndex: 'share', render: (v: number) => `${v.toLocaleString()}골` },
+                      { title: '분배액', dataIndex: 'share', render: (v: number) => `${v.toLocaleString()}전` },
                       {
                         title: '정산', dataIndex: 'paid',
                         render: (paid: boolean, s) => (
@@ -258,7 +259,7 @@ function LootEditModal({
           <Switch checked={dropped} onChange={setDropped} />
         </div>
         <div>
-          <div style={{ marginBottom: 4 }}>판매금액 (골드)</div>
+          <div style={{ marginBottom: 4 }}>판매금액 (전)</div>
           <InputNumber
             value={soldPrice ?? undefined}
             onChange={(v) => setSoldPrice(v == null ? null : Number(v))}
@@ -296,7 +297,7 @@ function DistributeModal({
   return (
     <Modal open={open} onCancel={onClose} onOk={save} title={`${loot.itemName} · 분배`} okText="분배 확정" width={520}>
       <div style={{ marginBottom: 8 }}>
-        판매금액: <b>{loot.soldPrice?.toLocaleString() ?? 0}</b> 골드 ÷ {picked.length}명 = <b>{perShare.toLocaleString()}</b> 골드/인
+        판매금액: <b>{loot.soldPrice?.toLocaleString() ?? 0}</b> 전 ÷ {picked.length}명 = <b>{perShare.toLocaleString()}</b> 전/인
       </div>
       <Divider style={{ margin: '8px 0' }} />
       <Checkbox.Group

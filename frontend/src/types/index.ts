@@ -109,3 +109,41 @@ export interface StatsResult {
   members: MemberStat[]
   targets: TargetStat[]
 }
+
+export type ChannelType = 'MAIN' | 'INVADE'
+
+export interface PartyRole {
+  id: number
+  name: string
+  icon?: string | null
+  displayOrder: number
+  active: boolean
+}
+
+export interface PartyMemberView {
+  id: number
+  role: string
+  memberId?: number | null
+  freeName?: string | null
+  nickname: string
+  displayOrder: number
+}
+
+export interface PartyView {
+  id: number
+  raidId: number
+  channelType: ChannelType
+  channelNumber?: number | null
+  memo?: string | null
+  mikeMemberId?: number | null
+  mikeFreeName?: string | null
+  mikeNickname?: string | null
+  displayOrder: number
+  members: PartyMemberView[]
+}
+
+export interface PartyMemberEntry {
+  role: string
+  memberId?: number | null
+  freeName?: string | null
+}

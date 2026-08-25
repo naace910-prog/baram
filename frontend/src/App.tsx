@@ -12,6 +12,8 @@ import RaidCreatePage from '@/pages/RaidCreatePage'
 import MemberManagePage from '@/pages/MemberManagePage'
 import TargetManagePage from '@/pages/TargetManagePage'
 import StatsPage from '@/pages/StatsPage'
+import PartyRolesPage from '@/pages/PartyRolesPage'
+import RaidPartyPage from '@/pages/RaidPartyPage'
 
 export default function App() {
   const { fetchMe, loading } = useAuth()
@@ -33,9 +35,11 @@ export default function App() {
         <Route path="/raids" element={<RaidListPage />} />
         <Route path="/raids/new" element={<RaidCreatePage />} />
         <Route path="/raids/:id" element={<RaidDetailPage />} />
+        <Route path="/raids/:id/parties" element={<RaidPartyPage />} />
         <Route path="/stats" element={<StatsPage />} />
         <Route path="/members" element={<MemberManagePage />} />
         <Route path="/targets" element={<TargetManagePage />} />
+        <Route path="/party-roles" element={<PartyRolesPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

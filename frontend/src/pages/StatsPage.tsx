@@ -36,7 +36,7 @@ export default function StatsPage() {
               title="총 판매금액"
               value={overview?.totalRevenue ?? 0}
               prefix={<DollarOutlined />}
-              suffix="골"
+              suffix="전"
               valueStyle={{ color: '#52c41a' }}
               formatter={(v) => fmt(Number(v))}
             />
@@ -48,7 +48,7 @@ export default function StatsPage() {
               title="미정산 총액"
               value={overview?.unpaidTotal ?? 0}
               prefix={<WarningOutlined />}
-              suffix="골"
+              suffix="전"
               valueStyle={{ color: (overview?.unpaidTotal ?? 0) > 0 ? '#faad14' : '#8c8c8c' }}
               formatter={(v) => fmt(Number(v))}
             />
@@ -71,7 +71,7 @@ export default function StatsPage() {
               {
                 title: '미정산 금액', dataIndex: 'unpaidShare', width: 140, align: 'right',
                 render: (v: number, r) => v > 0
-                  ? <Tag color="orange" style={{ margin: 0 }}>{fmt(v)}골 ({r.unpaidCount}건)</Tag>
+                  ? <Tag color="orange" style={{ margin: 0 }}>{fmt(v)}전 ({r.unpaidCount}건)</Tag>
                   : <Tag color="green" style={{ margin: 0 }}>완납</Tag>,
               },
             ]}

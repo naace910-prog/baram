@@ -47,7 +47,7 @@ export default function DashboardPage() {
             <Statistic
               title="총 판매금액"
               value={stats?.overview?.totalRevenue ?? 0}
-              suffix="골"
+              suffix="전"
               prefix={<DollarOutlined />}
               valueStyle={{ color: '#52c41a' }}
               formatter={(v) => fmt(Number(v))}
@@ -63,7 +63,7 @@ export default function DashboardPage() {
             <Statistic
               title="미정산 총액"
               value={stats?.overview?.unpaidTotal ?? 0}
-              suffix="골"
+              suffix="전"
               prefix={<WarningOutlined />}
               valueStyle={{ color: (stats?.overview?.unpaidTotal ?? 0) > 0 ? '#faad14' : '#8c8c8c' }}
               formatter={(v) => fmt(Number(v))}

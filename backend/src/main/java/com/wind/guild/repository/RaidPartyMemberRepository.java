@@ -1,0 +1,11 @@
+package com.wind.guild.repository;
+
+import com.wind.guild.domain.RaidPartyMember;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.List;
+
+public interface RaidPartyMemberRepository extends JpaRepository<RaidPartyMember, Long> {
+    List<RaidPartyMember> findByPartyIdOrderByRoleAscDisplayOrderAsc(Long partyId);
+    void deleteByPartyId(Long partyId);
+}
