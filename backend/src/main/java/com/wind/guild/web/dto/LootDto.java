@@ -2,6 +2,7 @@ package com.wind.guild.web.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Min;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -9,6 +10,7 @@ import java.util.List;
 public class LootDto {
 
     public record UpsertLootRequest(
+            Long targetId,
             @NotBlank String itemName,
             boolean dropped,
             Long soldPrice,
@@ -17,6 +19,9 @@ public class LootDto {
     public record LootView(
             Long id,
             Long raidId,
+            Long targetId,
+            String targetName,
+            String targetIcon,
             String itemName,
             boolean dropped,
             Long soldPrice,
@@ -35,4 +40,10 @@ public class LootDto {
     public record DistributeRequest(@NotNull List<Long> memberIds) {}
 
     public record MarkPaidRequest(@NotNull Long shareId, boolean paid) {}
+
+    public record BulkDropEntry(
+            @NotNull Long targetId,
+            @NotNull @Min(1) Integer quantity) {}
+
+    public record BulkAddRequest(@NotNull List<BulkDropEntry> drops) {}
 }

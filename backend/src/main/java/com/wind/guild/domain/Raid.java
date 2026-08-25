@@ -14,9 +14,13 @@ public class Raid {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "target_id")
     private RaidTarget target;
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 20)
+    private RaidCategory category;
 
     @Column(nullable = false)
     private LocalDateTime scheduledAt;

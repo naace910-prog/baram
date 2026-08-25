@@ -1,5 +1,6 @@
 package com.wind.guild.web.dto;
 
+import com.wind.guild.domain.RaidCategory;
 import com.wind.guild.domain.RaidStatus;
 import com.wind.guild.domain.VoteType;
 import jakarta.validation.constraints.NotNull;
@@ -10,12 +11,14 @@ import java.util.List;
 public class RaidDto {
 
     public record CreateRequest(
-            @NotNull Long targetId,
+            RaidCategory category,
+            Long targetId,
             @NotNull LocalDateTime scheduledAt,
             String memo) {}
 
     public record UpdateRequest(
-            @NotNull Long targetId,
+            RaidCategory category,
+            Long targetId,
             @NotNull LocalDateTime scheduledAt,
             @NotNull RaidStatus status,
             String memo) {}
@@ -28,6 +31,7 @@ public class RaidDto {
 
     public record ListView(
             Long id,
+            RaidCategory category,
             Long targetId,
             String targetName,
             String targetIcon,
@@ -41,6 +45,7 @@ public class RaidDto {
 
     public record DetailView(
             Long id,
+            RaidCategory category,
             Long targetId,
             String targetName,
             String targetIcon,

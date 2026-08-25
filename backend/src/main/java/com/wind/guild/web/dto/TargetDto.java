@@ -1,5 +1,6 @@
 package com.wind.guild.web.dto;
 
+import com.wind.guild.domain.RaidCategory;
 import com.wind.guild.domain.RaidTarget;
 import jakarta.validation.constraints.NotBlank;
 
@@ -9,11 +10,12 @@ public class TargetDto {
             @NotBlank String name,
             @NotBlank String dropItemName,
             String icon,
+            RaidCategory category,
             String memo) {}
 
-    public record View(Long id, String name, String dropItemName, String icon, String memo) {
+    public record View(Long id, String name, String dropItemName, String icon, RaidCategory category, String memo) {
         public static View of(RaidTarget t) {
-            return new View(t.getId(), t.getName(), t.getDropItemName(), t.getIcon(), t.getMemo());
+            return new View(t.getId(), t.getName(), t.getDropItemName(), t.getIcon(), t.getCategory(), t.getMemo());
         }
     }
 }

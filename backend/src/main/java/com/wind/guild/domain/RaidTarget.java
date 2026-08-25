@@ -21,6 +21,10 @@ public class RaidTarget {
     @Column(length = 8)
     private String icon;
 
+    @Enumerated(EnumType.STRING)
+    @Column(length = 20)
+    private RaidCategory category;
+
     @Column(length = 400)
     private String memo;
 }

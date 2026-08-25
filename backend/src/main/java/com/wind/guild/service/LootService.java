@@ -3,18 +3,18 @@ package com.wind.guild.service;
 import com.wind.guild.domain.LootShare;
 import com.wind.guild.domain.Member;
 import com.wind.guild.domain.RaidLoot;
+import com.wind.guild.domain.RaidTarget;
 import com.wind.guild.repository.LootShareRepository;
 import com.wind.guild.repository.MemberRepository;
 import com.wind.guild.repository.RaidLootRepository;
+import com.wind.guild.repository.RaidTargetRepository;
 import com.wind.guild.web.dto.LootDto;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Map;
-import java.util.function.Function;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -25,6 +25,7 @@ public class LootService {
     private final RaidLootRepository lootRepository;
     private final LootShareRepository shareRepository;
     private final MemberRepository memberRepository;
+    private final RaidTargetRepository targetRepository;
 
     @Transactional(readOnly = true)
     public List<LootDto.LootView> listByRaid(Long raidId) {
@@ -34,18 +35,31 @@ public class LootService {
                 .map(LootShare::getMemberId).distinct().toList();
         Map<Long, String> nickMap = memberRepository.findAllById(memberIds).stream()
                 .collect(Collectors.toMap(Member::getId, Member::getNickname));
-        return loots.stream().map(l -> toView(l, nickMap)).toList();
+
+        Set<Long> targetIds = loots.stream()
+                .map(RaidLoot::getTargetId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<Long, RaidTarget> targetMap = targetRepository.findAllById(targetIds).stream()
+                .collect(Collectors.toMap(RaidTarget::getId, t -> t));
+
+        return loots.stream().map(l -> toView(l, nickMap, targetMap)).toList();
     }
 
-    private LootDto.LootView toView(RaidLoot l, Map<Long, String> nickMap) {
+    private LootDto.LootView toView(RaidLoot l, Map<Long, String> nickMap, Map<Long, RaidTarget> targetMap) {
         List<LootDto.ShareView> shares = shareRepository.findByLootId(l.getId()).stream()
                 .map(s -> new LootDto.ShareView(
                         s.getId(), s.getMemberId(),
                         nickMap.getOrDefault(s.getMemberId(), "?"),
                         s.getShare(), s.isPaid(), s.getPaidAt()))
                 .toList();
-        return new LootDto.LootView(l.getId(), l.getRaidId(), l.getItemName(),
-                l.isDropped(), l.getSoldPrice(), l.getSoldAt(), l.getMemo(), shares);
+        RaidTarget t = l.getTargetId() != null ? targetMap.get(l.getTargetId()) : null;
+        return new LootDto.LootView(
+                l.getId(), l.getRaidId(),
+                l.getTargetId(),
+                t != null ? t.getName() : null,
+                t != null ? t.getIcon() : null,
+                l.getItemName(), l.isDropped(), l.getSoldPrice(), l.getSoldAt(), l.getMemo(), shares);
     }
 
     public RaidLoot upsert(Long raidId, Long lootId, LootDto.UpsertLootRequest req) {
@@ -53,6 +67,7 @@ public class LootService {
                 ? RaidLoot.builder().raidId(raidId).build()
                 : lootRepository.findById(lootId)
                     .orElseThrow(() -> new IllegalArgumentException("득템 없음: " + lootId));
+        l.setTargetId(req.targetId());
         l.setItemName(req.itemName());
         l.setDropped(req.dropped());
         Long prevPrice = l.getSoldPrice();
@@ -62,6 +77,24 @@ public class LootService {
         }
         l.setMemo(req.memo());
         return lootRepository.save(l);
+    }
+
+    public int bulkAdd(Long raidId, LootDto.BulkAddRequest req) {
+        int created = 0;
+        for (LootDto.BulkDropEntry e : req.drops()) {
+            RaidTarget t = targetRepository.findById(e.targetId())
+                    .orElseThrow(() -> new IllegalArgumentException("대상 없음: " + e.targetId()));
+            for (int i = 0; i < e.quantity(); i++) {
+                lootRepository.save(RaidLoot.builder()
+                        .raidId(raidId)
+                        .targetId(t.getId())
+                        .itemName(t.getDropItemName())
+                        .dropped(true)
+                        .build());
+                created++;
+            }
+        }
+        return created;
     }
 
     public void delete(Long lootId) {
@@ -79,7 +112,7 @@ public class LootService {
             throw new IllegalArgumentException("분배 대상 문파원이 없습니다");
         }
         shareRepository.deleteByLootId(lootId);
-        shareRepository.flush();  // insert 전에 delete 확정
+        shareRepository.flush();
         long total = l.getSoldPrice();
         long per = total / memberIds.size();
         long remainder = total - per * memberIds.size();

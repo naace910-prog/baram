@@ -26,6 +26,7 @@ public class TargetService {
                 .name(req.name())
                 .dropItemName(req.dropItemName())
                 .icon(req.icon())
+                .category(req.category())
                 .memo(req.memo())
                 .build());
         return TargetDto.View.of(saved);
@@ -37,6 +38,7 @@ public class TargetService {
         t.setName(req.name());
         t.setDropItemName(req.dropItemName());
         t.setIcon(req.icon());
+        t.setCategory(req.category());
         t.setMemo(req.memo());
         return TargetDto.View.of(t);
     }

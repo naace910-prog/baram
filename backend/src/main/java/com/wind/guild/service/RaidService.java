@@ -40,7 +40,12 @@ public class RaidService {
         }
         RaidTarget t = r.getTarget();
         return new RaidDto.ListView(
-                r.getId(), t.getId(), t.getName(), t.getIcon(), t.getDropItemName(),
+                r.getId(),
+                r.getCategory(),
+                t != null ? t.getId() : null,
+                t != null ? t.getName() : null,
+                t != null ? t.getIcon() : null,
+                t != null ? t.getDropItemName() : null,
                 r.getScheduledAt(), r.getStatus(), r.getMemo(), y, n, m);
     }
 
@@ -61,15 +66,29 @@ public class RaidService {
                 .map(RaidAttendee::getMemberId).toList();
         RaidTarget t = r.getTarget();
         return new RaidDto.DetailView(
-                r.getId(), t.getId(), t.getName(), t.getIcon(), t.getDropItemName(),
+                r.getId(),
+                r.getCategory(),
+                t != null ? t.getId() : null,
+                t != null ? t.getName() : null,
+                t != null ? t.getIcon() : null,
+                t != null ? t.getDropItemName() : null,
                 r.getScheduledAt(), r.getStatus(), r.getMemo(), voteViews, attendees);
     }
 
     public Raid create(RaidDto.CreateRequest req) {
-        RaidTarget target = targetRepository.findById(req.targetId())
-                .orElseThrow(() -> new IllegalArgumentException("대상 없음: " + req.targetId()));
+        RaidTarget target = null;
+        RaidCategory category = req.category();
+        if (req.targetId() != null) {
+            target = targetRepository.findById(req.targetId())
+                    .orElseThrow(() -> new IllegalArgumentException("대상 없음: " + req.targetId()));
+            if (category == null) category = target.getCategory();
+        }
+        if (category == null) {
+            throw new IllegalArgumentException("레이드 카테고리를 지정해주세요");
+        }
         return raidRepository.save(Raid.builder()
                 .target(target)
+                .category(category)
                 .scheduledAt(req.scheduledAt())
                 .memo(req.memo())
                 .status(RaidStatus.PLANNED)
@@ -79,9 +98,13 @@ public class RaidService {
     public Raid update(Long id, RaidDto.UpdateRequest req) {
         Raid r = raidRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("레이드 없음: " + id));
-        RaidTarget target = targetRepository.findById(req.targetId())
-                .orElseThrow(() -> new IllegalArgumentException("대상 없음: " + req.targetId()));
+        RaidTarget target = null;
+        if (req.targetId() != null) {
+            target = targetRepository.findById(req.targetId())
+                    .orElseThrow(() -> new IllegalArgumentException("대상 없음: " + req.targetId()));
+        }
         r.setTarget(target);
+        if (req.category() != null) r.setCategory(req.category());
         r.setScheduledAt(req.scheduledAt());
         r.setStatus(req.status());
         r.setMemo(req.memo());

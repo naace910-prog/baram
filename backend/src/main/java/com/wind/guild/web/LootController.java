@@ -42,6 +42,13 @@ public class LootController {
         return lootService.listByRaid(raidId);
     }
 
+    @PostMapping("/bulk")
+    public List<LootDto.LootView> bulkAdd(@PathVariable Long raidId,
+                                          @Valid @RequestBody LootDto.BulkAddRequest req) {
+        lootService.bulkAdd(raidId, req);
+        return lootService.listByRaid(raidId);
+    }
+
     @PutMapping("/{lootId}")
     public List<LootDto.LootView> update(@PathVariable Long raidId, @PathVariable Long lootId,
                                          @Valid @RequestBody LootDto.UpsertLootRequest req) {

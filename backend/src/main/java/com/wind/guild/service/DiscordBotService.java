@@ -137,7 +137,7 @@ public class DiscordBotService extends ListenerAdapter {
             e.reply("시간 형식이 잘못됐습니다. HH:mm 또는 MM/dd HH:mm").setEphemeral(true).queue();
             return;
         }
-        var raid = raidService.create(new RaidDto.CreateRequest(target.getId(), when, memo));
+        var raid = raidService.create(new RaidDto.CreateRequest(target.getCategory(), target.getId(), when, memo));
         e.reply("레이드 등록됨: " + target.getName() + " " + when.format(DateTimeFormatter.ofPattern("MM/dd HH:mm")))
                 .setEphemeral(true).queue();
         DiscordNotifier n = notifier(); if (n != null) n.notifyRaidCreated(raid.getId());
@@ -227,7 +227,7 @@ public class DiscordBotService extends ListenerAdapter {
             if (target == null) return;
             LocalDateTime when = extractDateTime(raw);
             if (when == null) return;
-            var raid = raidService.create(new RaidDto.CreateRequest(target.getId(), when, null));
+            var raid = raidService.create(new RaidDto.CreateRequest(target.getCategory(), target.getId(), when, null));
             e.getMessage().reply("✅ 레이드 등록됨: " + target.getName() + " · "
                     + when.format(DateTimeFormatter.ofPattern("MM/dd HH:mm"))
                     + "\n" + props.getSiteBaseUrl() + "/raids/" + raid.getId()).queue();

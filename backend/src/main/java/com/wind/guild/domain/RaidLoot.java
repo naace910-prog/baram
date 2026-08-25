@@ -17,6 +17,9 @@ public class RaidLoot {
     @Column(name = "raid_id", nullable = false)
     private Long raidId;
 
+    @Column(name = "target_id")
+    private Long targetId;
+
     @Column(nullable = false, length = 100)
     private String itemName;
 
