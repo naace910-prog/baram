@@ -4,6 +4,10 @@ server:
   servlet:
     session:
       timeout: 12h
+  error:
+    include-message: always
+    include-binding-errors: always
+    include-stacktrace: on_param
 
 spring:
   application:
