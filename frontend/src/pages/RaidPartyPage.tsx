@@ -75,17 +75,7 @@ export default function RaidPartyPage() {
     setActiveDrag(data)
   }
 
-  const onDragEnd = (e: DragEndEvent) => {
-    setActiveDrag(null)
-    if (!e.over) return
-    const overId = String(e.over.id)  // format: "party:{partyId}:role:{roleName}"
-    const parts = overId.split(':')
-    if (parts.length !== 4 || parts[0] !== 'party') return
-    const partyId = Number(parts[1])
-    const role = parts[3]
-
-    const data = e.active.data.current as { memberId?: number; freeName?: string; source?: { partyId: number; index: number } }
-    // 소스가 다른 파티/슬롯이면 그쪽에서 제거
+  const applyMove = (data: { memberId?: number; freeName?: string; source?: { partyId: number; index: number } }, targetPartyId: number, role: string) => {
     if (data.source) {
       const src = data.source
       setDraft(prev => {
@@ -96,15 +86,45 @@ export default function RaidPartyPage() {
       })
       markDirty(src.partyId)
     }
-    // 타겟 파티/슬롯에 추가
     setDraft(prev => {
       const next = { ...prev }
-      next[partyId] = [...(next[partyId] ?? []), {
+      next[targetPartyId] = [...(next[targetPartyId] ?? []), {
         role, memberId: data.memberId, freeName: data.freeName,
       }]
       return next
     })
-    markDirty(partyId)
+    markDirty(targetPartyId)
+  }
+
+  const onDragEnd = (e: DragEndEvent) => {
+    setActiveDrag(null)
+    if (!e.over) return
+    const overId = String(e.over.id)  // format: "party:{partyId}:role:{roleName}"
+    const parts_ = overId.split(':')
+    if (parts_.length !== 4 || parts_[0] !== 'party') return
+    const targetPartyId = Number(parts_[1])
+    const role = parts_[3]
+
+    const data = e.active.data.current as { memberId?: number; freeName?: string; nickname?: string; source?: { partyId: number; index: number } }
+
+    // 파티 간 이동인 경우 confirm (같은 파티 안 이동은 그냥 진행)
+    if (data.source && data.source.partyId !== targetPartyId) {
+      const srcParty = parties.find(p => p.id === data.source!.partyId)
+      const tgtParty = parties.find(p => p.id === targetPartyId)
+      if (srcParty && tgtParty) {
+        const srcLabel = `${channelLabel(srcParty.channelType)}${srcParty.channelNumber ? ' 채널 ' + srcParty.channelNumber : ''}`
+        const tgtLabel = `${channelLabel(tgtParty.channelType)}${tgtParty.channelNumber ? ' 채널 ' + tgtParty.channelNumber : ''}`
+        modal.confirm({
+          title: `${srcLabel} 에 편성된 인원입니다`,
+          content: `${data.nickname ?? '해당 인원'} 을(를) ${tgtLabel} 로 이동하시겠습니까?`,
+          okText: '이동',
+          cancelText: '취소',
+          onOk: () => applyMove(data, targetPartyId, role),
+        })
+        return
+      }
+    }
+    applyMove(data, targetPartyId, role)
   }
 
   const removeFromParty = (partyId: number, index: number) => {
@@ -365,24 +385,68 @@ function RoleDropSlot({
       >
         {entries.map((e) => {
           const label = e.memberId != null ? (nickById.get(e.memberId) ?? `#${e.memberId}`) : (e.freeName ?? '?')
-          const key = `${e.role}:${e.memberId ?? e.freeName}:${e.originalIndex}`
           const showCount = e.memberId != null && (memberOccurrence.get(e.memberId) ?? 0) > 1
+          const displayLabel = label + (showCount ? ` (${memberOccurrence.get(e.memberId!)})` : '')
           return (
-            <Tag
-              key={key}
-              closable={master}
-              onClose={(ev) => { ev.preventDefault(); onRemove(e.originalIndex) }}
+            <PlacedChip
+              key={`${e.role}:${e.memberId ?? e.freeName}:${e.originalIndex}`}
+              partyId={partyId}
+              index={e.originalIndex}
+              memberId={e.memberId ?? undefined}
+              freeName={e.freeName ?? undefined}
+              nickname={label}
+              displayLabel={displayLabel}
               color={e.freeName ? 'orange' : (showCount ? 'gold' : 'purple')}
-              style={{ margin: 0, fontSize: 13, padding: '2px 8px' }}
-            >
-              {label}{showCount ? ` (${memberOccurrence.get(e.memberId!) })` : ''}
-            </Tag>
+              closable={master}
+              disabled={!master}
+              onRemove={() => onRemove(e.originalIndex)}
+            />
           )
         })}
         {master && (
           <Button size="small" type="dashed" icon={<PlusOutlined />} onClick={onAddFree}>외부</Button>
         )}
       </div>
+    </div>
+  )
+}
+
+function PlacedChip({
+  partyId, index, memberId, freeName, nickname, displayLabel, color, closable, disabled, onRemove,
+}: {
+  partyId: number; index: number
+  memberId?: number; freeName?: string; nickname: string; displayLabel: string
+  color: string; closable: boolean; disabled: boolean
+  onRemove: () => void
+}) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: `placed:${partyId}:${index}:${memberId ?? freeName ?? 'x'}`,
+    data: { memberId, freeName, nickname, source: { partyId, index } },
+    disabled,
+  })
+  return (
+    <div
+      ref={setNodeRef}
+      {...listeners}
+      {...attributes}
+      style={{
+        opacity: isDragging ? 0.4 : 1,
+        cursor: disabled ? 'default' : 'grab',
+        display: 'inline-flex', touchAction: 'none',
+      }}
+    >
+      <Tag
+        color={color}
+        closable={closable}
+        onClose={(ev) => {
+          ev.preventDefault()
+          ev.stopPropagation()
+          onRemove()
+        }}
+        style={{ margin: 0, fontSize: 13, padding: '2px 8px', userSelect: 'none' }}
+      >
+        {displayLabel}
+      </Tag>
     </div>
   )
 }
