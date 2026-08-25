@@ -14,6 +14,7 @@ RUN cd backend && mvn -B -DskipTests package
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 COPY --from=backend /app/backend/target/*.jar /app/app.jar
-ENV JAVA_OPTS="-Xmx400m -XX:+UseSerialGC"
+ENV TZ=Asia/Seoul
+ENV JAVA_OPTS="-Xmx400m -XX:+UseSerialGC -Duser.timezone=Asia/Seoul"
 EXPOSE 8080
 ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar /app/app.jar"]
