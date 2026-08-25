@@ -80,17 +80,24 @@ public class AuthController {
             resp.sendRedirect(base + "login?discordError=" + (error == null ? "no_code" : error));
             return;
         }
-        var result = discordOAuth.handleCallback(code, session);
-        if (result.isLoggedIn()) {
-            resp.sendRedirect(base);
-        } else {
-            String reason = result.getReason();
-            String uid = result.getUser().id();
-            String name = result.getUser().globalName() != null
-                    ? result.getUser().globalName() : result.getUser().username();
-            resp.sendRedirect(base + "login?discordError=" + reason
-                    + "&discordId=" + URLEncoder.encode(uid, StandardCharsets.UTF_8)
-                    + "&discordName=" + URLEncoder.encode(name == null ? "" : name, StandardCharsets.UTF_8));
+        try {
+            var result = discordOAuth.handleCallback(code, session);
+            if (result.isLoggedIn()) {
+                resp.sendRedirect(base);
+            } else {
+                String reason = result.getReason();
+                String uid = result.getUser().id();
+                String name = result.getUser().globalName() != null
+                        ? result.getUser().globalName() : result.getUser().username();
+                resp.sendRedirect(base + "login?discordError=" + reason
+                        + "&discordId=" + URLEncoder.encode(uid, StandardCharsets.UTF_8)
+                        + "&discordName=" + URLEncoder.encode(name == null ? "" : name, StandardCharsets.UTF_8));
+            }
+        } catch (Exception e) {
+            String msg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+            if (msg.length() > 200) msg = msg.substring(0, 200);
+            resp.sendRedirect(base + "login?discordError=exchange_failed"
+                    + "&detail=" + URLEncoder.encode(msg, StandardCharsets.UTF_8));
         }
     }
 }
