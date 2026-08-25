@@ -377,13 +377,31 @@ function DistributeModal({
         판매금액: <b>{loot.soldPrice?.toLocaleString() ?? 0}</b> 전 ÷ {picked.length}명 = <b>{perShare.toLocaleString()}</b> 전/인
       </div>
       <Divider style={{ margin: '8px 0' }} />
-      <Checkbox.Group
-        value={picked}
-        onChange={(v) => onPickedChange(v as number[])}
-        style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', rowGap: 6 }}
-      >
-        {members.map((m) => <Checkbox key={m.id} value={m.id}>{m.nickname}</Checkbox>)}
-      </Checkbox.Group>
+      <div style={{ marginBottom: 8 }}>
+        <Button size="small" onClick={() => onPickedChange(members.map(m => m.id))}>전체 선택</Button>
+        <Button size="small" onClick={() => onPickedChange([])} style={{ marginLeft: 4 }}>전체 해제</Button>
+        <span style={{ marginLeft: 8, color: '#8c8c8c', fontSize: 12 }}>선택: {picked.length}명</span>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', rowGap: 8, columnGap: 12 }}>
+        {members.map((m) => {
+          const checked = picked.includes(m.id)
+          return (
+            <label key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', userSelect: 'none' }}>
+              <input
+                type="checkbox"
+                checked={checked}
+                onChange={(e) => {
+                  const next = e.target.checked
+                    ? [...picked, m.id]
+                    : picked.filter(id => id !== m.id)
+                  onPickedChange(next)
+                }}
+              />
+              <span>{m.nickname}</span>
+            </label>
+          )
+        })}
+      </div>
     </Modal>
   )
 }
