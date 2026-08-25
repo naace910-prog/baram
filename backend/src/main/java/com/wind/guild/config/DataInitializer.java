@@ -10,6 +10,7 @@ import com.wind.guild.repository.MemberRepository;
 import com.wind.guild.repository.PartyRoleRepository;
 import com.wind.guild.repository.RaidRepository;
 import com.wind.guild.repository.RaidTargetRepository;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,10 +30,20 @@ public class DataInitializer implements CommandLineRunner {
     private final RaidRepository raidRepository;
     private final PartyRoleRepository partyRoleRepository;
     private final PasswordEncoder passwordEncoder;
+    private final JdbcTemplate jdbc;
 
     @Override
     @Transactional
     public void run(String... args) {
+        // 스키마 마이그레이션: Hibernate ddl-auto=update 는 컬럼 NOT NULL 해제 못 함
+        // 어금니 카테고리 raid 는 target_id 가 null 이어야 함
+        try {
+            jdbc.execute("ALTER TABLE raids ALTER COLUMN target_id DROP NOT NULL");
+            log.info("스키마 마이그레이션: raids.target_id NOT NULL 해제");
+        } catch (Exception e) {
+            log.debug("raids.target_id NOT NULL 해제 스킵 (이미 nullable): {}", e.toString());
+        }
+
         if (memberRepository.count() == 0) {
             memberRepository.save(Member.builder()
                     .account("master")
