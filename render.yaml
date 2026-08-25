@@ -1,0 +1,43 @@
+services:
+  - type: web
+    name: wind-guild
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./Dockerfile
+    envVars:
+      # DB — Supabase PostgreSQL 접속정보. Dashboard 에서 직접 입력
+      - key: SPRING_DATASOURCE_URL
+        sync: false
+      - key: SPRING_DATASOURCE_USERNAME
+        sync: false
+      - key: SPRING_DATASOURCE_PASSWORD
+        sync: false
+      - key: SPRING_DATASOURCE_DRIVER
+        value: org.postgresql.Driver
+
+      # Prod 에선 H2 콘솔 끄기
+      - key: H2_CONSOLE_ENABLED
+        value: "false"
+
+      # SITE_BASE_URL — 배포 후 실제 URL 로 Dashboard 에서 입력 (예: https://wind-guild.onrender.com)
+      - key: SITE_BASE_URL
+        sync: false
+
+      # Discord — 아래 6개는 Dashboard 에서 나중에 입력 (없어도 앱은 뜸)
+      - key: DISCORD_ENABLED
+        value: "false"
+      - key: DISCORD_BOT_TOKEN
+        sync: false
+      - key: DISCORD_GUILD_ID
+        sync: false
+      - key: DISCORD_NOTIFY_CHANNEL_ID
+        sync: false
+      - key: DISCORD_CLIENT_ID
+        sync: false
+      - key: DISCORD_CLIENT_SECRET
+        sync: false
+      - key: DISCORD_OAUTH_REDIRECT_URI
+        sync: false
+      - key: DISCORD_OAUTH_SUCCESS_REDIRECT
+        sync: false

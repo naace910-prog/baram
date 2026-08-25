@@ -1,0 +1,10 @@
+.git
+.gitignore
+README.md
+**/node_modules
+**/dist
+**/target
+**/*.log
+**/.vite
+**/*.tsbuildinfo
+backend/data

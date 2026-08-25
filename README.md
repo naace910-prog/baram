@@ -105,11 +105,7 @@ fly secrets set DISCORD_ENABLED=true DISCORD_BOT_TOKEN=... (나머지 시크릿)
 fly deploy
 ```
 
-**Render.com** (신용카드 불필요, 잠자기 있음):
-- New Web Service → GitHub 저장소 연결
-- Build command: `cd backend && mvn -DskipTests package`
-- Start command: `java -jar backend/target/guild-backend-0.0.1-SNAPSHOT.jar`
-- 환경변수 6개 등록
+**Render.com** — 완전무료 · GitHub 로그인 30초 · 카드 불필요. **⭐ 실제 배포 가이드는 아래 E 섹션 참고.**
 
 **Railway.app**: 마찬가지로 GitHub 연결, `nixpacks` 자동 빌드
 
@@ -321,6 +317,119 @@ sudo tail -f /var/log/nginx/error.log   # nginx 로그
 
 ### D. GitHub Actions로 CI/CD
 - 원하시면 `.github/workflows/deploy.yml` 추가해서 push 시 자동 배포 가능
+
+---
+
+### E. Render.com + Supabase + UptimeRobot (완전무료 · 카드불필요 · GitHub 로그인만)
+
+세 서비스 다 GitHub 계정으로 30초 안에 가입 가능. 카드/실명인증 불필요.
+결과: **HTTPS 도메인 자동 제공** + **PostgreSQL 500MB 영구 무료** + **봇 24/7 유지** + **자동 배포**.
+
+#### E-1. Supabase — 무료 PostgreSQL 만들기
+
+1. https://supabase.com → **Start your project** → **Sign in with GitHub**
+2. **New project**:
+   - Name: `wind-guild`
+   - Database Password: 강한 비밀번호 생성해서 **어딘가에 저장** (여기가 유일한 표시)
+   - Region: **Northeast Asia (Seoul)**
+   - Pricing Plan: **Free**
+3. 생성 대기 (~2분)
+4. 좌측 메뉴 **Project Settings** → **Database** → **Connection string** 섹션
+5. **Session pooler** 탭 클릭 (Render 같은 서버리스 환경에 맞음)
+6. `URI` 를 복사. 형식 예:
+   ```
+   postgres://postgres.abcdefg:[YOUR-PASSWORD]@aws-0-ap-northeast-2.pooler.supabase.com:5432/postgres
+   ```
+7. `[YOUR-PASSWORD]` 를 위에서 저장한 비번으로 교체하고, `postgres://` → `jdbc:postgresql://` 로 변경:
+   ```
+   jdbc:postgresql://aws-0-ap-northeast-2.pooler.supabase.com:5432/postgres
+   ```
+   - **SPRING_DATASOURCE_URL** 로 쓸 값 = 위 jdbc URL
+   - **SPRING_DATASOURCE_USERNAME** = `postgres.abcdefg` (URI의 @ 앞부분)
+   - **SPRING_DATASOURCE_PASSWORD** = 위에서 저장한 비번
+
+#### E-2. Render — 웹 서비스 만들기
+
+1. https://render.com → **Get Started for Free** → **GitHub** 로그인
+2. Dashboard 우상단 **New +** → **Blueprint**
+3. **Connect a repository** → `naace910-prog/baram` 선택
+4. Render 가 저장소의 `render.yaml` 자동 감지 → **Apply**
+5. Environment Variables 입력 창이 뜨면 아래 3개(Discord 는 나중에 활성화 시)만 입력:
+   - `SPRING_DATASOURCE_URL` = E-1 에서 만든 jdbc URL
+   - `SPRING_DATASOURCE_USERNAME` = `postgres.xxxxxx`
+   - `SPRING_DATASOURCE_PASSWORD` = Supabase 비번
+   - `SITE_BASE_URL` = 나중에 채움 (일단 아무거나, 예: `https://placeholder`)
+6. **Create Web Service** 클릭
+7. 첫 빌드 5~10분 (Docker 이미지 만드는 중). Dashboard 상단 Logs 탭에서 진행상황 확인
+8. 완료되면 상단에 `https://wind-guild-xxxx.onrender.com` 형태의 URL 발급됨
+
+#### E-3. Render — 실제 URL 세팅
+
+1. 발급된 URL 복사 (예: `https://wind-guild-abcd.onrender.com`)
+2. Render Dashboard → 서비스 → **Environment** → `SITE_BASE_URL` 값 위 URL 로 변경
+3. 자동 재배포 (~5분)
+
+#### E-4. 접속 확인
+
+- 브라우저에서 `https://wind-guild-abcd.onrender.com` 열기
+- 첫 접속은 20~30초 걸림 (콜드 스타트)
+- 로그인: **master / 1234** → 접속 성공 시 정상
+
+#### E-5. UptimeRobot — 슬립 방지 (필수)
+
+Render Free 는 **15분 무접속 시 슬립**. 슬립되면 다음 요청까지 30~60초 지연 + 봇 WebSocket 끊김. UptimeRobot 으로 5분마다 자동 핑:
+
+1. https://uptimerobot.com → **Register** → **Sign up with GitHub**
+2. Dashboard → **+ New Monitor**:
+   - Monitor Type: **HTTPS**
+   - Friendly Name: `wind-guild`
+   - URL: `https://wind-guild-abcd.onrender.com` (E-3 URL)
+   - Monitoring Interval: **5 minutes** (무료 최소값)
+3. **Create Monitor** 클릭
+4. 이후 24/7 5분마다 핑 자동 발송 → Render 슬립 진입 안 함
+
+#### E-6. Discord 활성화 (배포 후)
+
+Render 도메인이 확정된 뒤:
+
+1. Discord Developer Portal → OAuth2 → **Redirects** 에 아래 추가:
+   ```
+   https://wind-guild-abcd.onrender.com/api/auth/discord/callback
+   ```
+2. Render Dashboard → Environment → 다음 값들 채우고 저장 (자동 재배포):
+   ```
+   DISCORD_ENABLED = true
+   DISCORD_BOT_TOKEN = (Bot 탭 → Reset Token)
+   DISCORD_CLIENT_ID = (OAuth2 탭 → CLIENT ID)
+   DISCORD_CLIENT_SECRET = (OAuth2 탭 → Reset Secret)
+   DISCORD_GUILD_ID = (Discord 앱에서 서버 우클릭 → 서버 ID 복사)
+   DISCORD_NOTIFY_CHANNEL_ID = (알림 채널 우클릭 → 채널 ID 복사)
+   DISCORD_OAUTH_REDIRECT_URI = https://wind-guild-abcd.onrender.com/api/auth/discord/callback
+   DISCORD_OAUTH_SUCCESS_REDIRECT = https://wind-guild-abcd.onrender.com/
+   ```
+3. 재배포 후 로그인 화면에 "Discord로 로그인" 버튼 활성화됨
+
+#### E-7. 코드 업데이트
+
+로컬에서 `git push` 만 하면 Render 가 자동 감지해서 재빌드·재배포. 아무 것도 안 해도 됨.
+
+#### E-8. 로그 확인
+
+Render Dashboard → 서비스 → **Logs** 탭 (실시간 스트리밍)
+
+#### E-9. 요금
+
+| 항목 | 요금 |
+|---|---|
+| Render Web Service Free | $0 (무료 forever) |
+| Supabase Free | $0 (500MB DB · 무료 forever) |
+| UptimeRobot Free | $0 (50 모니터 · 무료 forever) |
+| **합계** | **$0 · 카드 등록 없음** |
+
+Free 티어 한계:
+- Render: 월 750시간 (한 앱만 돌리면 항상 켜져있어도 무료 안에서 됨)
+- Supabase: 500MB DB · 2 프로젝트 · 1주간 미접속 시 일시정지(주 1회 열면 유지)
+- UptimeRobot: 50 모니터 · 5분 최소 간격
 
 ---
 
