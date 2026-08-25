@@ -1,6 +1,9 @@
 # -------- Stage 1: 프론트 빌드 --------
 FROM node:20-alpine AS frontend
 WORKDIR /app/frontend
+# node:20-alpine 내장 npm 10.8.2 의 "Exit handler never called!" 버그 회피 (Render 빌드 71s 지점 실패)
+RUN npm install -g npm@11.0.0
+ENV NODE_OPTIONS=--max-old-space-size=512
 COPY frontend/package*.json ./
 RUN npm ci --no-audit --no-fund
 COPY frontend/ ./
