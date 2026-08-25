@@ -18,16 +18,15 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     @Override
     public void afterConnectionEstablished(WebSocketSession session) {
         Object memberId = session.getAttributes().get(SessionKeys.MEMBER_ID);
-        if (memberId == null) {
-            try { session.close(CloseStatus.NOT_ACCEPTABLE.withReason("로그인 필요")); } catch (Exception ignored) {}
-            return;
-        }
         broadcaster.register(session);
-        log.debug("chat ws connected: sessionId={} memberId={}", session.getId(), memberId);
+        log.info("chat ws connected: sessionId={} memberId={} (total={})",
+                session.getId(), memberId, broadcaster.connectedCount());
     }
 
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
         broadcaster.unregister(session);
+        log.info("chat ws closed: sessionId={} status={} (total={})",
+                session.getId(), status, broadcaster.connectedCount());
     }
 }

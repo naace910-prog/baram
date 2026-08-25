@@ -32,14 +32,19 @@ public class ChatBroadcaster {
             return;
         }
         TextMessage tm = new TextMessage(json);
+        int sent = 0, failed = 0;
         for (WebSocketSession s : sessions) {
             if (!s.isOpen()) { sessions.remove(s); continue; }
             try {
                 synchronized (s) { s.sendMessage(tm); }
+                sent++;
             } catch (Exception e) {
-                log.debug("chat send failed on session {}: {}", s.getId(), e.toString());
+                log.warn("chat send failed on session {}: {}", s.getId(), e.toString());
                 sessions.remove(s);
+                failed++;
             }
         }
+        log.info("chat broadcast msgId={} sent={} failed={} totalSessions={}",
+                msg.id(), sent, failed, sessions.size());
     }
 }
