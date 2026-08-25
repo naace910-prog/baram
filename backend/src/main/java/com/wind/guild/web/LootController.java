@@ -108,32 +108,11 @@ public class LootController {
         if (req.paid()) {
             shareRepo.findById(shareId).ifPresent(s -> {
                 push.sendToMember(s.getMemberId(),
-                        "💰 정산 완료 · 수령 확인 요망",
-                        MONEY.format(s.getShare()) + "전이 지급 처리되었습니다. 앱에서 수령 확인을 눌러주세요.",
+                        "💰 정산 완료",
+                        MONEY.format(s.getShare()) + "전 정산되었습니다",
                         "/raids/" + raidId);
                 String nick = memberRepo.findById(s.getMemberId()).map(m -> m.getNickname()).orElse("?");
-                chat.saveSystem("💵 지급 완료: " + nick + " · " + MONEY.format(s.getShare()) + "전 (수령 확인 대기)");
-            });
-        }
-        return lootService.listByRaid(raidId);
-    }
-
-    @PostMapping("/{lootId}/shares/{shareId}/received")
-    public List<LootDto.LootView> markReceived(@PathVariable Long raidId,
-                                               @PathVariable Long lootId,
-                                               @PathVariable Long shareId,
-                                               @RequestBody LootDto.MarkReceivedRequest req,
-                                               HttpSession session) {
-        Long actorId = (Long) session.getAttribute(SessionKeys.MEMBER_ID);
-        if (actorId == null) {
-            throw new IllegalStateException("로그인이 필요합니다");
-        }
-        lootService.markReceived(shareId, req.received(), actorId);
-        discord.syncLootCard(lootId, DiscordNotifier.LootTrigger.PAID_CHANGED);
-        if (req.received()) {
-            shareRepo.findById(shareId).ifPresent(s -> {
-                String nick = memberRepo.findById(s.getMemberId()).map(m -> m.getNickname()).orElse("?");
-                chat.saveSystem("✅ 수령 확인: " + nick + " · " + MONEY.format(s.getShare()) + "전");
+                chat.saveSystem("💵 정산 완료: " + nick + " · " + MONEY.format(s.getShare()) + "전");
             });
         }
         return lootService.listByRaid(raidId);

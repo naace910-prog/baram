@@ -44,8 +44,6 @@ public class LootDto {
 
     public record MarkPaidRequest(@NotNull Long shareId, boolean paid) {}
 
-    public record MarkReceivedRequest(@NotNull Long shareId, boolean received) {}
-
     public record UpdateShareAmountRequest(@NotNull @Min(0) Long amount) {}
 
     public record BulkDropEntry(

@@ -253,7 +253,7 @@ export default function RaidDetailPage() {
                           />
                         ) },
                       {
-                        title: '지급(문주)', dataIndex: 'paid', width: 160,
+                        title: '지급', dataIndex: 'paid', width: 180,
                         render: (paid: boolean, s: any) => (
                           <Space direction="vertical" size={0}>
                             <Switch
@@ -272,36 +272,6 @@ export default function RaidDetailPage() {
                             )}
                           </Space>
                         )
-                      },
-                      {
-                        title: '수령(본인)', dataIndex: 'received', width: 160,
-                        render: (received: boolean, s: any) => {
-                          const isMe = s.memberId === user?.memberId
-                          return (
-                            <Space direction="vertical" size={0}>
-                              <Switch
-                                checked={received}
-                                disabled={!isMe || !s.paid}
-                                onChange={async (c) => {
-                                  try {
-                                    await lootApi.markReceived(raidId, l.id, s.id, c)
-                                    qc.invalidateQueries({ queryKey: ['loots', raidId] })
-                                  } catch (e: any) {
-                                    message.error(e?.response?.data?.error ?? '수령 처리 실패')
-                                  }
-                                }}
-                              />
-                              {received && s.receivedAt && (
-                                <span style={{ fontSize: 11, color: '#52c41a' }}>
-                                  ✓ {dayjs(s.receivedAt).format('MM/dd HH:mm')}
-                                </span>
-                              )}
-                              {!isMe && !received && (
-                                <span style={{ fontSize: 11, color: '#bfbfbf' }}>본인만</span>
-                              )}
-                            </Space>
-                          )
-                        }
                       },
                     ]}
                   />

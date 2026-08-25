@@ -149,8 +149,6 @@ export const lootApi = {
     http.post<Loot[]>(`/raids/${raidId}/loots/${lootId}/distribute`, { memberIds }).then((r) => r.data),
   markPaid: (raidId: number, lootId: number, shareId: number, paid: boolean) =>
     http.post<Loot[]>(`/raids/${raidId}/loots/${lootId}/shares/${shareId}/paid`, { shareId, paid }).then((r) => r.data),
-  markReceived: (raidId: number, lootId: number, shareId: number, received: boolean) =>
-    http.post<Loot[]>(`/raids/${raidId}/loots/${lootId}/shares/${shareId}/received`, { shareId, received }).then((r) => r.data),
   updateShareAmount: (raidId: number, lootId: number, shareId: number, amount: number) =>
     http.put<Loot[]>(`/raids/${raidId}/loots/${lootId}/shares/${shareId}`, { amount }).then((r) => r.data),
 }

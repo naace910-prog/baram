@@ -142,23 +142,6 @@ public class LootService {
         s.setPaid(paid);
         s.setPaidAt(paid ? LocalDateTime.now() : null);
         s.setPaidBy(paid ? actorMemberId : null);
-        if (!paid) {
-            s.setReceived(false);
-            s.setReceivedAt(null);
-        }
-    }
-
-    public void markReceived(Long shareId, boolean received, Long actorMemberId) {
-        LootShare s = shareRepository.findById(shareId)
-                .orElseThrow(() -> new IllegalArgumentException("분배 없음: " + shareId));
-        if (!Objects.equals(s.getMemberId(), actorMemberId)) {
-            throw new IllegalStateException("본인의 분배금만 수령 확인할 수 있습니다");
-        }
-        if (received && !s.isPaid()) {
-            throw new IllegalStateException("아직 지급되지 않았습니다");
-        }
-        s.setReceived(received);
-        s.setReceivedAt(received ? LocalDateTime.now() : null);
     }
 
     public void updateShareAmount(Long shareId, long amount) {
