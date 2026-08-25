@@ -29,7 +29,8 @@ public class DiscordOAuthService {
     private final RestTemplate rest = new RestTemplate();
 
     public boolean isConfigured() {
-        return props.getClientId() != null && !props.getClientId().isBlank()
+        return props.isEnabled()
+                && props.getClientId() != null && !props.getClientId().isBlank()
                 && props.getClientSecret() != null && !props.getClientSecret().isBlank();
     }
 
