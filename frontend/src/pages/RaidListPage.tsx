@@ -57,7 +57,7 @@ export default function RaidListPage() {
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
               <div>
                 <div style={{ fontSize: 16, fontWeight: 600 }}>
-                  <Tag color="purple">{r.targetName}</Tag>
+                  <Tag color="purple">{r.targetIcon ?? '🎯'} {r.targetName}</Tag>
                   <Tag color={statusColor[r.status]}>{r.status}</Tag>
                   {dayjs(r.scheduledAt).format('MM/DD(dd) HH:mm')}
                 </div>

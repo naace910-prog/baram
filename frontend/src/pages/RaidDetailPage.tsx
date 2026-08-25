@@ -74,7 +74,7 @@ export default function RaidDetailPage() {
       <Card>
         <Descriptions column={{ xs: 1, md: 2 }} bordered size="small">
           <Descriptions.Item label="대상">
-            <Tag color="purple">{raid.targetName}</Tag>
+            <Tag color="purple">{raid.targetIcon ?? '🎯'} {raid.targetName}</Tag>
           </Descriptions.Item>
           <Descriptions.Item label="드랍">{raid.dropItemName}</Descriptions.Item>
           <Descriptions.Item label="시간">{dayjs(raid.scheduledAt).format('YYYY-MM-DD(dd) HH:mm')}</Descriptions.Item>

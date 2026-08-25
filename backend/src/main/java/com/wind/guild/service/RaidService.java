@@ -40,7 +40,7 @@ public class RaidService {
         }
         RaidTarget t = r.getTarget();
         return new RaidDto.ListView(
-                r.getId(), t.getId(), t.getName(), t.getDropItemName(),
+                r.getId(), t.getId(), t.getName(), t.getIcon(), t.getDropItemName(),
                 r.getScheduledAt(), r.getStatus(), r.getMemo(), y, n, m);
     }
 
@@ -61,7 +61,7 @@ public class RaidService {
                 .map(RaidAttendee::getMemberId).toList();
         RaidTarget t = r.getTarget();
         return new RaidDto.DetailView(
-                r.getId(), t.getId(), t.getName(), t.getDropItemName(),
+                r.getId(), t.getId(), t.getName(), t.getIcon(), t.getDropItemName(),
                 r.getScheduledAt(), r.getStatus(), r.getMemo(), voteViews, attendees);
     }
 

@@ -25,6 +25,7 @@ public class TargetService {
         RaidTarget saved = repo.save(RaidTarget.builder()
                 .name(req.name())
                 .dropItemName(req.dropItemName())
+                .icon(req.icon())
                 .memo(req.memo())
                 .build());
         return TargetDto.View.of(saved);
@@ -35,6 +36,7 @@ public class TargetService {
                 .orElseThrow(() -> new IllegalArgumentException("대상 없음: " + id));
         t.setName(req.name());
         t.setDropItemName(req.dropItemName());
+        t.setIcon(req.icon());
         t.setMemo(req.memo());
         return TargetDto.View.of(t);
     }

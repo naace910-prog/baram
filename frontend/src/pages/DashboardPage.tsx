@@ -84,7 +84,7 @@ export default function DashboardPage() {
               >
                 <List.Item.Meta
                   title={<>
-                    <Tag color="purple">{r.targetName}</Tag>
+                    <Tag color="purple">{r.targetIcon ?? '🎯'} {r.targetName}</Tag>
                     {dayjs(r.scheduledAt).format('MM/DD(dd) HH:mm')}
                   </>}
                   description={<>드랍: {r.dropItemName} · 참가 {r.yesCount} / 불참 {r.noCount} / 미정 {r.maybeCount}</>}

@@ -33,6 +33,7 @@ export default function RaidPartyPage() {
   const [dirty, setDirty] = useState<Set<number>>(new Set())
   const [activeDrag, setActiveDrag] = useState<{ memberId?: number; freeName?: string; nickname: string } | null>(null)
   const [creating, setCreating] = useState(false)
+  const [autoFill, setAutoFill] = useState<{ open: boolean; partyId?: number; role?: string }>({ open: false })
 
   useEffect(() => {
     const d: Draft = {}
@@ -154,10 +155,15 @@ export default function RaidPartyPage() {
       <div className="page-header">
         <Space>
           <Button icon={<ArrowLeftOutlined />} onClick={() => nav(`/raids/${raidId}`)}>레이드로</Button>
-          <h2 style={{ margin: 0 }}>파티 편성 · {raid.targetName} · {dayjs(raid.scheduledAt).format('MM/DD HH:mm')}</h2>
+          <h2 style={{ margin: 0 }}>파티 편성 · {raid.targetIcon ?? '🎯'} {raid.targetName} · {dayjs(raid.scheduledAt).format('MM/DD HH:mm')}</h2>
         </Space>
         {master && (
           <Space>
+            {parties.length > 0 && (
+              <Button onClick={() => setAutoFill({ open: true, partyId: parties[0].id, role: roles[0]?.name })}>
+                YES 자동 배치
+              </Button>
+            )}
             {dirty.size > 0 && <Button type="primary" onClick={saveAll}>{dirty.size}개 파티 저장</Button>}
             <Button icon={<PlusOutlined />} onClick={() => setCreating(true)}>새 파티</Button>
           </Space>
@@ -238,6 +244,62 @@ export default function RaidPartyPage() {
           message.success('파티 생성됨')
         }}
       />
+
+      <Modal
+        open={autoFill.open}
+        title="참가 투표 YES 자동 배치"
+        onCancel={() => setAutoFill({ open: false })}
+        okText="배치"
+        onOk={() => {
+          const partyId = autoFill.partyId!
+          const role = autoFill.role!
+          const placedIds = new Set<number>()
+          Object.values(draft).forEach(list => list.forEach(e => {
+            if (e.memberId != null) placedIds.add(e.memberId)
+          }))
+          const yesUnplaced = raid.votes.filter(v => v.vote === 'YES' && !placedIds.has(v.memberId))
+          if (yesUnplaced.length === 0) {
+            message.info('배치할 YES 인원이 없습니다 (전원 이미 배치됨)')
+            setAutoFill({ open: false })
+            return
+          }
+          setDraft(prev => {
+            const next = { ...prev }
+            next[partyId] = [...(next[partyId] ?? []), ...yesUnplaced.map(v => ({
+              role, memberId: v.memberId, freeName: undefined,
+            }))]
+            return next
+          })
+          markDirty(partyId)
+          message.success(`${yesUnplaced.length}명 배치 (미저장, 상단 저장 버튼 눌러야 반영)`)
+          setAutoFill({ open: false })
+        }}
+      >
+        <div style={{ marginBottom: 8 }}>
+          아직 어느 파티에도 배치되지 않은 <b>참가(YES)</b> 투표자를 선택한 파티/역할에 한꺼번에 넣습니다.
+        </div>
+        <div style={{ marginBottom: 8 }}>
+          <div style={{ fontSize: 12, color: '#8c8c8c', marginBottom: 4 }}>대상 파티</div>
+          <Select
+            style={{ width: '100%' }}
+            value={autoFill.partyId}
+            onChange={(v) => setAutoFill(prev => ({ ...prev, partyId: v }))}
+            options={parties.map(p => ({
+              value: p.id,
+              label: `${channelLabel(p.channelType)} · 채널 ${p.channelNumber ?? '-'} ${p.memo ? '· ' + p.memo : ''}`,
+            }))}
+          />
+        </div>
+        <div>
+          <div style={{ fontSize: 12, color: '#8c8c8c', marginBottom: 4 }}>배치할 역할</div>
+          <Select
+            style={{ width: '100%' }}
+            value={autoFill.role}
+            onChange={(v) => setAutoFill(prev => ({ ...prev, role: v }))}
+            options={roles.map(r => ({ value: r.name, label: `${r.icon ?? ''} ${r.name}` }))}
+          />
+        </div>
+      </Modal>
     </>
   )
 }

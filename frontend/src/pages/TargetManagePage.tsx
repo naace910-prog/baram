@@ -23,6 +23,7 @@ export default function TargetManagePage() {
           rowKey="id" size="small" pagination={false}
           dataSource={targets}
           columns={[
+            { title: '아이콘', dataIndex: 'icon', width: 80, align: 'center', render: (v: string) => v || '-' },
             { title: '이름', dataIndex: 'name', width: 140 },
             { title: '드랍 아이템', dataIndex: 'dropItemName', width: 200 },
             { title: '메모', dataIndex: 'memo' },
@@ -62,7 +63,7 @@ function TargetEditModal({
   const { message } = AntApp.useApp()
   useEffect(() => {
     if (!open) return
-    if (target) form.setFieldsValue({ name: target.name, dropItemName: target.dropItemName, memo: target.memo })
+    if (target) form.setFieldsValue({ name: target.name, dropItemName: target.dropItemName, icon: target.icon, memo: target.memo })
     else form.resetFields()
   }, [open, target, form])
 
@@ -80,6 +81,9 @@ function TargetEditModal({
     >
       <Form form={form} layout="vertical">
         <Form.Item name="name" label="이름" rules={[{ required: true }]}><Input /></Form.Item>
+        <Form.Item name="icon" label="아이콘 (이모지 1~2자, 선택)">
+          <Input maxLength={8} placeholder="예: 💀 🐲 🦖" />
+        </Form.Item>
         <Form.Item name="dropItemName" label="드랍 아이템" rules={[{ required: true }]}><Input /></Form.Item>
         <Form.Item name="memo" label="메모"><Input.TextArea rows={2} maxLength={400} /></Form.Item>
       </Form>

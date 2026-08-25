@@ -24,15 +24,23 @@ public class StatsDto {
     public record TargetStat(
             Long targetId,
             String name,
+            String icon,
             String dropItemName,
             long killCount,
             long totalSoldPrice,
             long avgSoldPrice
     ) {}
 
+    public record MonthlyBucket(
+            String yearMonth,       // "2026-08"
+            long killCount,
+            long revenue
+    ) {}
+
     public record Result(
             Overview overview,
             List<MemberStat> members,
-            List<TargetStat> targets
+            List<TargetStat> targets,
+            List<MonthlyBucket> monthly
     ) {}
 }

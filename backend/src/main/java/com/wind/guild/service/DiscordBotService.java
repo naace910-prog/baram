@@ -15,6 +15,7 @@ import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
+import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.dv8tion.jda.api.interactions.commands.OptionType;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
@@ -27,6 +28,8 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Slf4j
 @Service
@@ -185,6 +188,72 @@ public class DiscordBotService extends ListenerAdapter {
             log.warn("Button interaction failed: {}", ex.toString());
             e.reply("에러: " + ex.getMessage()).setEphemeral(true).queue();
         }
+    }
+
+    // 자연어 파서: `해골왕 등록` `08/25 21:00 흑룡` `20260825 21시 진룡 등록해줘`
+    private static final Pattern P_DATETIME = Pattern.compile("(\\d{4})[-./]?(\\d{2})[-./]?(\\d{2})");
+    private static final Pattern P_MMDD = Pattern.compile("(\\d{1,2})[/월-](\\d{1,2})[일]?");
+    private static final Pattern P_TIME = Pattern.compile("(\\d{1,2})[:시](\\d{2})?");
+    private static final Pattern P_TARGET = Pattern.compile("(해골왕|흑룡|감룡|묵룡|진룡)");
+
+    @Override
+    public void onMessageReceived(MessageReceivedEvent e) {
+        if (e.getAuthor().isBot()) return;
+        if (props.getNotifyChannelId() == null || props.getNotifyChannelId().isBlank()) return;
+        if (!e.getChannel().getId().equals(props.getNotifyChannelId())) return;
+        String raw = e.getMessage().getContentRaw();
+        if (raw == null || raw.isBlank()) return;
+        if (!raw.contains("등록") && !raw.contains("잡자") && !raw.contains("가자")) return;
+
+        try {
+            var target = extractTarget(raw);
+            if (target == null) return;
+            LocalDateTime when = extractDateTime(raw);
+            if (when == null) return;
+            var raid = raidService.create(new RaidDto.CreateRequest(target.getId(), when, null));
+            e.getMessage().reply("✅ 레이드 등록됨: " + target.getName() + " · "
+                    + when.format(DateTimeFormatter.ofPattern("MM/dd HH:mm"))
+                    + "\n" + props.getSiteBaseUrl() + "/raids/" + raid.getId()).queue();
+            DiscordNotifier n = notifier();
+            if (n != null) n.notifyRaidCreated(raid.getId());
+        } catch (Exception ex) {
+            log.debug("자연어 파싱 실패 (무시): {}", ex.toString());
+        }
+    }
+
+    private RaidTarget extractTarget(String text) {
+        Matcher m = P_TARGET.matcher(text);
+        if (!m.find()) return null;
+        return targetRepository.findByName(m.group(1)).orElse(null);
+    }
+
+    private LocalDateTime extractDateTime(String text) {
+        LocalDateTime now = LocalDateTime.now();
+        int year = now.getYear(), month = now.getMonthValue(), day = now.getDayOfMonth();
+        boolean dateFound = false;
+
+        Matcher dt = P_DATETIME.matcher(text);
+        if (dt.find()) {
+            year = Integer.parseInt(dt.group(1));
+            month = Integer.parseInt(dt.group(2));
+            day = Integer.parseInt(dt.group(3));
+            dateFound = true;
+        } else {
+            Matcher md = P_MMDD.matcher(text);
+            if (md.find()) {
+                month = Integer.parseInt(md.group(1));
+                day = Integer.parseInt(md.group(2));
+                dateFound = true;
+            }
+        }
+        Matcher tm = P_TIME.matcher(text);
+        if (!tm.find()) return null;
+        int hour = Integer.parseInt(tm.group(1));
+        int minute = tm.group(2) != null ? Integer.parseInt(tm.group(2)) : 0;
+
+        LocalDateTime result = LocalDateTime.of(year, month, day, hour, minute);
+        if (!dateFound && result.isBefore(now)) result = result.plusDays(1);
+        return result;
     }
 
     @PreDestroy

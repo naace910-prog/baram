@@ -38,7 +38,7 @@ export default function RaidCreatePage() {
             <Select
               placeholder="레이드 대상 선택"
               size="large"
-              options={targets.map((t) => ({ label: `${t.name} (${t.dropItemName})`, value: t.id }))}
+              options={targets.map((t) => ({ label: `${t.icon ?? '🎯'} ${t.name} (${t.dropItemName})`, value: t.id }))}
             />
           </Form.Item>
           <Form.Item name="scheduledAt" label="시간" rules={[{ required: true, message: '선택' }]}>

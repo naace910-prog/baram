@@ -1,9 +1,11 @@
 package com.wind.guild.service;
 
 import com.wind.guild.domain.Member;
+import com.wind.guild.domain.RaidAttendee;
 import com.wind.guild.domain.RaidParty;
 import com.wind.guild.domain.RaidPartyMember;
 import com.wind.guild.repository.MemberRepository;
+import com.wind.guild.repository.RaidAttendeeRepository;
 import com.wind.guild.repository.RaidPartyMemberRepository;
 import com.wind.guild.repository.RaidPartyRepository;
 import com.wind.guild.repository.RaidRepository;
@@ -24,6 +26,7 @@ public class PartyService {
     private final RaidPartyRepository partyRepo;
     private final RaidPartyMemberRepository memberRepo;
     private final MemberRepository membersRepo;
+    private final RaidAttendeeRepository attendeeRepo;
 
     @Transactional(readOnly = true)
     public List<PartyDto.PartyView> listByRaid(Long raidId) {
@@ -91,8 +94,10 @@ public class PartyService {
     }
 
     public void delete(Long partyId) {
+        RaidParty p = partyRepo.findById(partyId).orElse(null);
         memberRepo.deleteByPartyId(partyId);
         partyRepo.deleteById(partyId);
+        if (p != null) syncAttendeesFromParties(p.getRaidId());
     }
 
     public PartyDto.PartyView replaceMembers(Long partyId, PartyDto.MembersReplaceRequest req) {
@@ -112,8 +117,24 @@ public class PartyService {
                     .displayOrder(ord)
                     .build());
         }
+        syncAttendeesFromParties(p.getRaidId());
         return listByRaid(p.getRaidId()).stream()
                 .filter(v -> v.id().equals(partyId)).findFirst().orElseThrow();
+    }
+
+    private void syncAttendeesFromParties(Long raidId) {
+        List<RaidParty> parties = partyRepo.findByRaidIdOrderByDisplayOrderAsc(raidId);
+        Set<Long> distinctIds = new HashSet<>();
+        for (RaidParty pp : parties) {
+            if (pp.getMikeMemberId() != null) distinctIds.add(pp.getMikeMemberId());
+            for (RaidPartyMember m : memberRepo.findByPartyIdOrderByRoleAscDisplayOrderAsc(pp.getId())) {
+                if (m.getMemberId() != null) distinctIds.add(m.getMemberId());
+            }
+        }
+        attendeeRepo.deleteByRaidId(raidId);
+        for (Long mid : distinctIds) {
+            attendeeRepo.save(RaidAttendee.builder().raidId(raidId).memberId(mid).build());
+        }
     }
 
     private PartyDto.PartyView toView(RaidParty p, List<PartyDto.MemberView> members) {

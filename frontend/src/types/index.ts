@@ -23,6 +23,7 @@ export interface RaidTarget {
   id: number
   name: string
   dropItemName: string
+  icon?: string | null
   memo?: string | null
 }
 
@@ -30,6 +31,7 @@ export interface RaidListItem {
   id: number
   targetId: number
   targetName: string
+  targetIcon?: string | null
   dropItemName: string
   scheduledAt: string
   status: RaidStatus
@@ -50,6 +52,7 @@ export interface RaidDetail {
   id: number
   targetId: number
   targetName: string
+  targetIcon?: string | null
   dropItemName: string
   scheduledAt: string
   status: RaidStatus
@@ -98,16 +101,24 @@ export interface MemberStat {
 export interface TargetStat {
   targetId: number
   name: string
+  icon?: string | null
   dropItemName: string
   killCount: number
   totalSoldPrice: number
   avgSoldPrice: number
 }
 
+export interface MonthlyBucket {
+  yearMonth: string   // "2026-08"
+  killCount: number
+  revenue: number
+}
+
 export interface StatsResult {
   overview: StatsOverview
   members: MemberStat[]
   targets: TargetStat[]
+  monthly: MonthlyBucket[]
 }
 
 export type ChannelType = 'MAIN' | 'INVADE'

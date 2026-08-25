@@ -7,6 +7,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
+import java.time.YearMonth;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 @Service
@@ -81,11 +84,49 @@ public class StatsService {
             }
             long avg = count > 0 ? total / count : 0;
             targetStats.add(new StatsDto.TargetStat(
-                    t.getId(), t.getName(), t.getDropItemName(),
+                    t.getId(), t.getName(), t.getIcon(), t.getDropItemName(),
                     kill, total, avg));
         }
         targetStats.sort(Comparator.comparingLong(StatsDto.TargetStat::totalSoldPrice).reversed());
 
-        return new StatsDto.Result(overview, memberStats, targetStats);
+        List<StatsDto.MonthlyBucket> monthly = buildMonthly(raids, loots);
+
+        return new StatsDto.Result(overview, memberStats, targetStats, monthly);
+    }
+
+    private List<StatsDto.MonthlyBucket> buildMonthly(List<Raid> raids, List<RaidLoot> loots) {
+        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM");
+        YearMonth now = YearMonth.from(LocalDate.now());
+        List<YearMonth> months = new ArrayList<>();
+        for (int i = 11; i >= 0; i--) months.add(now.minusMonths(i));
+
+        Map<Long, YearMonth> raidMonth = new HashMap<>();
+        for (Raid r : raids) {
+            raidMonth.put(r.getId(), YearMonth.from(r.getScheduledAt()));
+        }
+
+        Map<YearMonth, Long> killByMonth = new HashMap<>();
+        for (Raid r : raids) {
+            if (r.getStatus() == RaidStatus.DONE) {
+                killByMonth.merge(raidMonth.get(r.getId()), 1L, Long::sum);
+            }
+        }
+
+        Map<YearMonth, Long> revenueByMonth = new HashMap<>();
+        for (RaidLoot l : loots) {
+            if (l.getSoldPrice() == null) continue;
+            YearMonth ym = raidMonth.get(l.getRaidId());
+            if (ym == null) continue;
+            revenueByMonth.merge(ym, l.getSoldPrice(), Long::sum);
+        }
+
+        List<StatsDto.MonthlyBucket> buckets = new ArrayList<>();
+        for (YearMonth m : months) {
+            buckets.add(new StatsDto.MonthlyBucket(
+                    m.format(fmt),
+                    killByMonth.getOrDefault(m, 0L),
+                    revenueByMonth.getOrDefault(m, 0L)));
+        }
+        return buckets;
     }
 }

@@ -40,11 +40,11 @@ public class DataInitializer implements CommandLineRunner {
 
         if (raidTargetRepository.count() == 0) {
             raidTargetRepository.saveAll(List.of(
-                    RaidTarget.builder().name("해골왕").dropItemName("해골왕의 뼈").build(),
-                    RaidTarget.builder().name("흑룡").dropItemName("흑룡의 어금니").build(),
-                    RaidTarget.builder().name("감룡").dropItemName("감룡의 어금니").build(),
-                    RaidTarget.builder().name("묵룡").dropItemName("묵룡의 어금니").build(),
-                    RaidTarget.builder().name("진룡").dropItemName("진룡의 어금니").build()
+                    RaidTarget.builder().name("해골왕").dropItemName("해골왕의 뼈").icon("💀").build(),
+                    RaidTarget.builder().name("흑룡").dropItemName("흑룡의 어금니").icon("🐲").build(),
+                    RaidTarget.builder().name("감룡").dropItemName("감룡의 어금니").icon("🦎").build(),
+                    RaidTarget.builder().name("묵룡").dropItemName("묵룡의 어금니").icon("🐉").build(),
+                    RaidTarget.builder().name("진룡").dropItemName("진룡의 어금니").icon("🦖").build()
             ));
             log.info("레이드 대상 5마리 시드 완료");
         }
