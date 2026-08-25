@@ -1,8 +1,21 @@
-import { Button, Card, Form, Input, App as AntApp, Divider, Alert, Tag, Space } from 'antd'
+import { Button, Card, Form, Input, App as AntApp, Divider, Alert, Tag, Space, Checkbox } from 'antd'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/store/authStore'
 import { useEffect, useState } from 'react'
 import { authApi } from '@/api/client'
+
+const LS_ACCOUNT = 'wg.lastAccount'
+const LS_PW = 'wg.lastPw'
+const LS_REMEMBER_PW = 'wg.rememberPw'
+
+function readSaved() {
+  try {
+    const account = localStorage.getItem(LS_ACCOUNT) || ''
+    const rememberPw = localStorage.getItem(LS_REMEMBER_PW) === '1'
+    const password = rememberPw ? (localStorage.getItem(LS_PW) || '') : ''
+    return { account, password, rememberPw }
+  } catch { return { account: '', password: '', rememberPw: false } }
+}
 
 const DISCORD_COLOR = '#5865F2'
 const DiscordIcon = () => (
@@ -18,7 +31,9 @@ export default function LoginPage() {
   const { message } = AntApp.useApp()
   const [discordEnabled, setDiscordEnabled] = useState(false)
   const [discordUrl, setDiscordUrl] = useState<string | undefined>()
-  const [showAccountForm, setShowAccountForm] = useState(false)
+  const saved = readSaved()
+  const [showAccountForm, setShowAccountForm] = useState(!!saved.account)
+  const [rememberPw, setRememberPw] = useState(saved.rememberPw)
 
   const discordError = params.get('discordError')
   const discordId = params.get('discordId')
@@ -36,6 +51,16 @@ export default function LoginPage() {
   const onFinish = async (v: { account: string; password: string }) => {
     try {
       await login(v.account, v.password)
+      try {
+        localStorage.setItem(LS_ACCOUNT, v.account)
+        if (rememberPw) {
+          localStorage.setItem(LS_PW, v.password)
+          localStorage.setItem(LS_REMEMBER_PW, '1')
+        } else {
+          localStorage.removeItem(LS_PW)
+          localStorage.removeItem(LS_REMEMBER_PW)
+        }
+      } catch {}
       message.success('환영합니다')
       nav('/')
     } catch {}
@@ -130,12 +155,25 @@ export default function LoginPage() {
             계정 · 비밀번호로 로그인 (문주 초기 세팅용)
           </Button>
         ) : (
-          <Form layout="vertical" onFinish={onFinish} initialValues={{ account: 'master', password: '1234' }}>
+          <Form
+            layout="vertical"
+            onFinish={onFinish}
+            initialValues={{
+              account: saved.account || 'master',
+              password: saved.password || (saved.account ? '' : '1234'),
+            }}
+            autoComplete="on"
+          >
             <Form.Item name="account" label="계정" rules={[{ required: true, message: '계정 입력' }]}>
-              <Input size="large" autoFocus />
+              <Input size="large" autoFocus autoComplete="username" name="account" />
             </Form.Item>
             <Form.Item name="password" label="비밀번호" rules={[{ required: true, message: '비밀번호 입력' }]}>
-              <Input.Password size="large" />
+              <Input.Password size="large" autoComplete="current-password" name="password" />
+            </Form.Item>
+            <Form.Item style={{ marginBottom: 8 }}>
+              <Checkbox checked={rememberPw} onChange={(e) => setRememberPw(e.target.checked)}>
+                이 기기에 비밀번호도 저장 (자동 로그인 편의)
+              </Checkbox>
             </Form.Item>
             <Space direction="vertical" style={{ width: '100%' }}>
               <Button type="primary" htmlType="submit" size="large" block>로그인</Button>
