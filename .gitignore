@@ -8,9 +8,9 @@ Thumbs.db
 
 ### Node ###
 node_modules/
-dist/
 .vite/
 *.local
+# frontend/dist 는 Render 빌드 회피용으로 커밋 (frontend/.gitignore 주석 참조)
 
 ### Java ###
 target/

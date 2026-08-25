@@ -1,5 +1,6 @@
 node_modules/
-dist/
 .vite/
 *.log
 *.tsbuildinfo
+# dist/ 는 원래 gitignore 대상이지만 Render 무료 티어의 npm registry 연결 타임아웃 회피를 위해
+# 로컬 빌드 결과를 커밋해서 Docker 안에서 npm 을 스킵함. 코드 수정 후엔 로컬에서 `npm run build` 재실행 필수.

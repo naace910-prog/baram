@@ -2,9 +2,9 @@
 .gitignore
 README.md
 **/node_modules
-**/dist
 **/target
 **/*.log
 **/.vite
 **/*.tsbuildinfo
 backend/data
+# frontend/dist 는 이제 컨텍스트에 포함되어야 하므로 제외 안 함
