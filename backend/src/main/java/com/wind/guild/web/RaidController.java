@@ -1,0 +1,71 @@
+package com.wind.guild.web;
+
+import com.wind.guild.config.SessionKeys;
+import com.wind.guild.domain.Raid;
+import com.wind.guild.service.DiscordNotifier;
+import com.wind.guild.service.RaidService;
+import com.wind.guild.web.dto.RaidDto;
+import jakarta.servlet.http.HttpSession;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/raids")
+@RequiredArgsConstructor
+public class RaidController {
+
+    private final RaidService raidService;
+    private final DiscordNotifier discord;
+
+    @GetMapping
+    public List<RaidDto.ListView> list() {
+        return raidService.list();
+    }
+
+    @GetMapping("/{id}")
+    public RaidDto.DetailView get(@PathVariable Long id) {
+        return raidService.get(id);
+    }
+
+    @PostMapping
+    public RaidDto.DetailView create(@Valid @RequestBody RaidDto.CreateRequest req) {
+        Raid r = raidService.create(req);
+        discord.notifyRaidCreated(r.getId());
+        return raidService.get(r.getId());
+    }
+
+    @PutMapping("/{id}")
+    public RaidDto.DetailView update(@PathVariable Long id, @Valid @RequestBody RaidDto.UpdateRequest req) {
+        raidService.update(id, req);
+        return raidService.get(id);
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> delete(@PathVariable Long id) {
+        raidService.delete(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{id}/votes")
+    public RaidDto.DetailView vote(
+            @PathVariable("id") Long raidId,
+            @Valid @RequestBody RaidDto.VoteRequest req,
+            HttpSession session) {
+        Long memberId = (Long) session.getAttribute(SessionKeys.MEMBER_ID);
+        if (memberId == null) throw new IllegalStateException("로그인이 필요합니다");
+        raidService.vote(raidId, memberId, req.vote());
+        return raidService.get(raidId);
+    }
+
+    @PutMapping("/{id}/attendees")
+    public RaidDto.DetailView setAttendees(
+            @PathVariable("id") Long raidId,
+            @Valid @RequestBody RaidDto.AttendeeRequest req) {
+        raidService.setAttendees(raidId, req.memberIds());
+        return raidService.get(raidId);
+    }
+}

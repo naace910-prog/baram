@@ -1,0 +1,48 @@
+server:
+  port: 8080
+  servlet:
+    session:
+      timeout: 12h
+
+spring:
+  application:
+    name: wind-guild
+  datasource:
+    url: jdbc:h2:file:./data/guild;AUTO_SERVER=TRUE;MODE=MySQL
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+    defer-datasource-initialization: true
+  sql:
+    init:
+      mode: always
+      data-locations: classpath:data.sql
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+discord:
+  enabled: ${DISCORD_ENABLED:false}
+  bot-token: ${DISCORD_BOT_TOKEN:}
+  guild-id: ${DISCORD_GUILD_ID:}
+  notify-channel-id: ${DISCORD_NOTIFY_CHANNEL_ID:}
+  webhook-url: ${DISCORD_WEBHOOK_URL:}
+  site-base-url: ${SITE_BASE_URL:http://localhost:5173}
+  client-id: ${DISCORD_CLIENT_ID:}
+  client-secret: ${DISCORD_CLIENT_SECRET:}
+  oauth-redirect-uri: ${DISCORD_OAUTH_REDIRECT_URI:http://localhost:8080/api/auth/discord/callback}
+  oauth-login-success-redirect: ${DISCORD_OAUTH_SUCCESS_REDIRECT:http://localhost:5173/}
+
+logging:
+  level:
+    org.springframework.security: INFO
+    com.wind.guild: DEBUG
+    net.dv8tion.jda: WARN

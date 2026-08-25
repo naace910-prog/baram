@@ -1,0 +1,84 @@
+import axios from 'axios'
+import { message } from 'antd'
+import type {
+  AuthUser, Member, RaidTarget, RaidListItem, RaidDetail, Loot, VoteType, RaidStatus, MemberRole
+} from '@/types'
+
+export const http = axios.create({
+  baseURL: '/api',
+  withCredentials: true,
+})
+
+http.interceptors.response.use(
+  (r) => r,
+  (err) => {
+    if (err.response?.status === 401) {
+      if (!location.pathname.startsWith('/login')) {
+        location.href = '/login'
+      }
+    } else {
+      const msg = err.response?.data?.error || err.message || '요청 실패'
+      message.error(msg)
+    }
+    return Promise.reject(err)
+  }
+)
+
+export const authApi = {
+  login: (account: string, password: string) =>
+    http.post<AuthUser>('/auth/login', { account, password }).then((r) => r.data),
+  logout: () => http.post('/auth/logout').then(() => true),
+  me: () => http.get<AuthUser>('/auth/me').then((r) => r.data),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    http.post('/auth/change-password', { currentPassword, newPassword }).then(() => true),
+  discordAuthorizeUrl: () =>
+    http.get<{ enabled: boolean; url?: string }>('/auth/discord/authorize-url').then((r) => r.data),
+}
+
+export const memberApi = {
+  list: (includeInactive = false) =>
+    http.get<Member[]>('/members', { params: { includeInactive } }).then((r) => r.data),
+  create: (body: { account: string; password: string; nickname: string; role: MemberRole; discordUserId?: string }) =>
+    http.post<Member>('/members', body).then((r) => r.data),
+  update: (id: number, body: { nickname: string; role: MemberRole; discordUserId?: string; active?: boolean }) =>
+    http.put<Member>(`/members/${id}`, body).then((r) => r.data),
+  resetPassword: (id: number, newPassword: string) =>
+    http.post(`/members/${id}/reset-password`, { newPassword }).then(() => true),
+}
+
+export const targetApi = {
+  list: () => http.get<RaidTarget[]>('/targets').then((r) => r.data),
+  create: (body: { name: string; dropItemName: string; memo?: string }) =>
+    http.post<RaidTarget>('/targets', body).then((r) => r.data),
+  update: (id: number, body: { name: string; dropItemName: string; memo?: string }) =>
+    http.put<RaidTarget>(`/targets/${id}`, body).then((r) => r.data),
+  delete: (id: number) => http.delete(`/targets/${id}`).then(() => true),
+}
+
+export const raidApi = {
+  list: () => http.get<RaidListItem[]>('/raids').then((r) => r.data),
+  get: (id: number) => http.get<RaidDetail>(`/raids/${id}`).then((r) => r.data),
+  create: (body: { targetId: number; scheduledAt: string; memo?: string }) =>
+    http.post<RaidDetail>('/raids', body).then((r) => r.data),
+  update: (id: number, body: { targetId: number; scheduledAt: string; status: RaidStatus; memo?: string }) =>
+    http.put<RaidDetail>(`/raids/${id}`, body).then((r) => r.data),
+  delete: (id: number) => http.delete(`/raids/${id}`).then(() => true),
+  vote: (id: number, vote: VoteType) =>
+    http.post<RaidDetail>(`/raids/${id}/votes`, { vote }).then((r) => r.data),
+  setAttendees: (id: number, memberIds: number[]) =>
+    http.put<RaidDetail>(`/raids/${id}/attendees`, { memberIds }).then((r) => r.data),
+}
+
+export const lootApi = {
+  list: (raidId: number) => http.get<Loot[]>(`/raids/${raidId}/loots`).then((r) => r.data),
+  create: (raidId: number, body: { itemName: string; dropped: boolean; soldPrice?: number; memo?: string }) =>
+    http.post<Loot[]>(`/raids/${raidId}/loots`, body).then((r) => r.data),
+  update: (raidId: number, lootId: number, body: { itemName: string; dropped: boolean; soldPrice?: number; memo?: string }) =>
+    http.put<Loot[]>(`/raids/${raidId}/loots/${lootId}`, body).then((r) => r.data),
+  delete: (raidId: number, lootId: number) =>
+    http.delete<Loot[]>(`/raids/${raidId}/loots/${lootId}`).then((r) => r.data),
+  distribute: (raidId: number, lootId: number, memberIds: number[]) =>
+    http.post<Loot[]>(`/raids/${raidId}/loots/${lootId}/distribute`, { memberIds }).then((r) => r.data),
+  markPaid: (raidId: number, lootId: number, shareId: number, paid: boolean) =>
+    http.post<Loot[]>(`/raids/${raidId}/loots/${lootId}/shares/${shareId}/paid`, { shareId, paid }).then((r) => r.data),
+}

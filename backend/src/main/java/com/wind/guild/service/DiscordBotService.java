@@ -1,0 +1,186 @@
+package com.wind.guild.service;
+
+import com.wind.guild.config.DiscordProperties;
+import com.wind.guild.domain.RaidTarget;
+import com.wind.guild.domain.VoteType;
+import com.wind.guild.repository.RaidTargetRepository;
+import com.wind.guild.web.dto.RaidDto;
+import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import net.dv8tion.jda.api.JDA;
+import net.dv8tion.jda.api.JDABuilder;
+import net.dv8tion.jda.api.entities.Guild;
+import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
+import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
+import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
+import net.dv8tion.jda.api.hooks.ListenerAdapter;
+import net.dv8tion.jda.api.interactions.commands.OptionType;
+import net.dv8tion.jda.api.interactions.commands.build.Commands;
+import net.dv8tion.jda.api.interactions.commands.build.OptionData;
+import net.dv8tion.jda.api.requests.GatewayIntent;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.stereotype.Service;
+
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
+import java.util.List;
+
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class DiscordBotService extends ListenerAdapter {
+
+    private final DiscordProperties props;
+    private final RaidTargetRepository targetRepository;
+    private final RaidService raidService;
+    private final ObjectProvider<DiscordNotifier> notifierProvider;
+
+    private JDA jda;
+
+    private DiscordNotifier notifier() { return notifierProvider.getIfAvailable(); }
+
+    @PostConstruct
+    public void start() {
+        if (!props.isEnabled() || props.getBotToken() == null || props.getBotToken().isBlank()) {
+            log.info("Discord bot is disabled (set DISCORD_ENABLED=true and DISCORD_BOT_TOKEN to enable).");
+            return;
+        }
+        try {
+            jda = JDABuilder.createDefault(props.getBotToken(),
+                            GatewayIntent.GUILD_MESSAGES,
+                            GatewayIntent.MESSAGE_CONTENT)
+                    .addEventListeners(this)
+                    .build();
+            jda.awaitReady();
+            log.info("Discord bot ready as {}", jda.getSelfUser().getAsTag());
+            registerCommands();
+        } catch (Exception e) {
+            log.error("Discord bot startup failed: {}", e.toString());
+        }
+    }
+
+    private void registerCommands() {
+        Guild guild = (props.getGuildId() != null && !props.getGuildId().isBlank())
+                ? jda.getGuildById(props.getGuildId()) : null;
+        var target = guild != null ? guild : null;
+        var upsert = target != null
+                ? target.updateCommands()
+                : jda.updateCommands();
+        upsert.addCommands(
+                Commands.slash("레이드등록", "새 레이드 일정을 등록합니다")
+                        .addOptions(
+                                new OptionData(OptionType.STRING, "대상", "레이드 대상 (예: 해골왕)", true),
+                                new OptionData(OptionType.STRING, "시간", "HH:mm 또는 MM/dd HH:mm", true),
+                                new OptionData(OptionType.STRING, "메모", "선택", false)
+                        ),
+                Commands.slash("레이드목록", "다가오는 레이드 목록을 봅니다")
+        ).queue();
+    }
+
+    public boolean isReady() { return jda != null && jda.getStatus() == JDA.Status.CONNECTED; }
+
+    public TextChannel notifyChannel() {
+        if (!isReady() || props.getNotifyChannelId() == null || props.getNotifyChannelId().isBlank()) return null;
+        return jda.getTextChannelById(props.getNotifyChannelId());
+    }
+
+    @Override
+    public void onSlashCommandInteraction(SlashCommandInteractionEvent e) {
+        try {
+            switch (e.getName()) {
+                case "레이드등록" -> handleCreateRaid(e);
+                case "레이드목록" -> handleListRaid(e);
+            }
+        } catch (Exception ex) {
+            log.warn("Slash command failed: {}", ex.toString());
+            if (!e.isAcknowledged()) e.reply("에러: " + ex.getMessage()).setEphemeral(true).queue();
+        }
+    }
+
+    private void handleCreateRaid(SlashCommandInteractionEvent e) {
+        String targetName = e.getOption("대상").getAsString();
+        String timeStr = e.getOption("시간").getAsString();
+        String memo = e.getOption("메모") != null ? e.getOption("메모").getAsString() : null;
+
+        RaidTarget target = targetRepository.findByName(targetName).orElse(null);
+        if (target == null) {
+            List<String> known = targetRepository.findAll().stream().map(RaidTarget::getName).toList();
+            e.reply("대상 '" + targetName + "'을 찾을 수 없습니다. 등록된 대상: " + known)
+                    .setEphemeral(true).queue();
+            return;
+        }
+        LocalDateTime when;
+        try {
+            when = parseWhen(timeStr);
+        } catch (Exception ex) {
+            e.reply("시간 형식이 잘못됐습니다. HH:mm 또는 MM/dd HH:mm").setEphemeral(true).queue();
+            return;
+        }
+        var raid = raidService.create(new RaidDto.CreateRequest(target.getId(), when, memo));
+        e.reply("레이드 등록됨: " + target.getName() + " " + when.format(DateTimeFormatter.ofPattern("MM/dd HH:mm")))
+                .setEphemeral(true).queue();
+        DiscordNotifier n = notifier(); if (n != null) n.notifyRaidCreated(raid.getId());
+    }
+
+    private LocalDateTime parseWhen(String s) {
+        s = s.trim();
+        LocalDateTime now = LocalDateTime.now();
+        if (s.matches("\\d{1,2}:\\d{2}")) {
+            LocalTime t = LocalTime.parse(s.length() == 4 ? "0" + s : s);
+            LocalDateTime dt = now.withHour(t.getHour()).withMinute(t.getMinute()).withSecond(0).withNano(0);
+            if (dt.isBefore(now)) dt = dt.plusDays(1);
+            return dt;
+        }
+        String[] parts = s.split("\\s+");
+        String[] md = parts[0].split("/");
+        String[] hm = parts[1].split(":");
+        int month = Integer.parseInt(md[0]);
+        int day = Integer.parseInt(md[1]);
+        int h = Integer.parseInt(hm[0]);
+        int m = Integer.parseInt(hm[1]);
+        LocalDateTime dt = LocalDateTime.of(now.getYear(), month, day, h, m);
+        if (dt.isBefore(now.minusDays(1))) dt = dt.plusYears(1);
+        return dt;
+    }
+
+    private void handleListRaid(SlashCommandInteractionEvent e) {
+        var list = raidService.list();
+        if (list.isEmpty()) { e.reply("등록된 레이드가 없습니다").setEphemeral(true).queue(); return; }
+        StringBuilder sb = new StringBuilder();
+        list.stream().limit(10).forEach(v -> sb.append("• [")
+                .append(v.status()).append("] ")
+                .append(v.targetName()).append(" ")
+                .append(v.scheduledAt().format(DateTimeFormatter.ofPattern("MM/dd HH:mm")))
+                .append(" (✅").append(v.yesCount()).append(" ❌").append(v.noCount())
+                .append(" ❓").append(v.maybeCount()).append(")\n"));
+        e.reply(sb.toString()).setEphemeral(true).queue();
+    }
+
+    @Override
+    public void onButtonInteraction(ButtonInteractionEvent e) {
+        String id = e.getComponentId();
+        if (!id.startsWith("raid:vote:")) return;
+        String[] parts = id.split(":");
+        try {
+            Long raidId = Long.parseLong(parts[2]);
+            VoteType vote = VoteType.valueOf(parts[3]);
+            String discordUserId = e.getUser().getId();
+            raidService.voteByDiscordUser(raidId, discordUserId, vote);
+            e.reply("투표 반영됨: " + vote).setEphemeral(true).queue();
+            DiscordNotifier n = notifier(); if (n != null) n.updateEmbed(raidId);
+        } catch (IllegalStateException ex) {
+            e.reply("⚠ " + ex.getMessage()).setEphemeral(true).queue();
+        } catch (Exception ex) {
+            log.warn("Button interaction failed: {}", ex.toString());
+            e.reply("에러: " + ex.getMessage()).setEphemeral(true).queue();
+        }
+    }
+
+    @PreDestroy
+    public void stop() {
+        if (jda != null) jda.shutdown();
+    }
+}

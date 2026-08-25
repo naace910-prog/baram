@@ -1,0 +1,119 @@
+import { Button, Card, Form, Input, App as AntApp, Divider, Alert, Tag, Space } from 'antd'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useAuth } from '@/store/authStore'
+import { useEffect, useState } from 'react'
+import { authApi } from '@/api/client'
+
+const DISCORD_COLOR = '#5865F2'
+const DiscordIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 71 55" fill="currentColor" style={{ marginRight: 6, verticalAlign: -3 }}>
+    <path d="M60.1 4.9A58.6 58.6 0 0 0 45.4.4a41 41 0 0 0-1.9 3.8 54.1 54.1 0 0 0-16 0A41 41 0 0 0 25.6.4 58.6 58.6 0 0 0 10.9 4.9C1.6 18.5-.9 31.7.4 44.8a58.9 58.9 0 0 0 18 9.1 42.5 42.5 0 0 0 3.9-6.3 38 38 0 0 1-6-2.9c.5-.4 1-.8 1.5-1.2a41.9 41.9 0 0 0 35.5 0c.5.4 1 .8 1.5 1.2a37.9 37.9 0 0 1-6 2.9 42.6 42.6 0 0 0 3.9 6.3 58.9 58.9 0 0 0 18-9.1c1.6-15.1-2.4-28.2-10.6-39.9ZM23.7 36.8c-3.5 0-6.4-3.2-6.4-7.2s2.8-7.2 6.4-7.2 6.4 3.2 6.4 7.2-2.9 7.2-6.4 7.2Zm23.6 0c-3.5 0-6.4-3.2-6.4-7.2s2.8-7.2 6.4-7.2 6.4 3.2 6.4 7.2-2.9 7.2-6.4 7.2Z" />
+  </svg>
+)
+
+export default function LoginPage() {
+  const { user, login } = useAuth()
+  const nav = useNavigate()
+  const [params] = useSearchParams()
+  const { message } = AntApp.useApp()
+  const [discordEnabled, setDiscordEnabled] = useState(false)
+  const [discordUrl, setDiscordUrl] = useState<string | undefined>()
+  const [showAccountForm, setShowAccountForm] = useState(false)
+
+  const discordError = params.get('discordError')
+  const discordId = params.get('discordId')
+  const discordName = params.get('discordName')
+
+  useEffect(() => { if (user) nav('/', { replace: true }) }, [user, nav])
+
+  useEffect(() => {
+    authApi.discordAuthorizeUrl()
+      .then((r) => { setDiscordEnabled(!!r.enabled); setDiscordUrl(r.url) })
+      .catch(() => setDiscordEnabled(false))
+  }, [])
+
+  const onFinish = async (v: { account: string; password: string }) => {
+    try {
+      await login(v.account, v.password)
+      message.success('환영합니다')
+      nav('/')
+    } catch {}
+  }
+
+  return (
+    <div
+      style={{
+        minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center',
+        padding: 16, background: 'linear-gradient(135deg, #1a103d 0%, #0d1a3a 100%)',
+      }}
+    >
+      <Card style={{ width: '100%', maxWidth: 420 }}>
+        <h1 style={{ textAlign: 'center', margin: '0 0 4px', color: '#7c3aed' }}>바람클래식-개화</h1>
+        <p style={{ textAlign: 'center', margin: '0 0 20px', color: '#666' }}>문파 전용</p>
+
+        {discordError === 'NOT_REGISTERED' && (
+          <Alert
+            type="warning"
+            showIcon
+            style={{ marginBottom: 12 }}
+            message="아직 등록되지 않은 디스코드 계정"
+            description={<div>
+              <div><b>{discordName}</b> 로 로그인 시도했습니다.</div>
+              <div style={{ marginTop: 6 }}>문주에게 아래 <b>디스코드 ID</b>를 알려주고 문파원 등록 요청하세요:</div>
+              <div style={{ marginTop: 6 }}>
+                <Tag color="blue" style={{ fontSize: 14, padding: '4px 8px' }}>{discordId}</Tag>
+              </div>
+            </div>}
+          />
+        )}
+        {discordError === 'INACTIVE' && (
+          <Alert type="error" showIcon message="비활성 계정입니다. 문주에게 문의하세요." style={{ marginBottom: 12 }} />
+        )}
+        {discordError && !['NOT_REGISTERED', 'INACTIVE'].includes(discordError) && (
+          <Alert type="error" showIcon message={`디스코드 로그인 실패: ${discordError}`} style={{ marginBottom: 12 }} />
+        )}
+
+        {discordEnabled && discordUrl ? (
+          <Button
+            block size="large" icon={<DiscordIcon />}
+            href={discordUrl}
+            style={{ background: DISCORD_COLOR, borderColor: DISCORD_COLOR, color: '#fff' }}
+          >
+            Discord로 로그인
+          </Button>
+        ) : (
+          <Alert
+            type="info" showIcon style={{ marginBottom: 12 }}
+            message="Discord OAuth이 아직 설정되지 않았습니다"
+            description="README 참고: DISCORD_CLIENT_ID / DISCORD_CLIENT_SECRET 환경변수 설정 필요"
+          />
+        )}
+
+        <Divider style={{ margin: '16px 0' }}>또는</Divider>
+
+        {!showAccountForm ? (
+          <Button block type="link" onClick={() => setShowAccountForm(true)}>
+            계정 · 비밀번호로 로그인 (문주 초기 세팅용)
+          </Button>
+        ) : (
+          <Form layout="vertical" onFinish={onFinish} initialValues={{ account: 'master', password: '1234' }}>
+            <Form.Item name="account" label="계정" rules={[{ required: true, message: '계정 입력' }]}>
+              <Input size="large" autoFocus />
+            </Form.Item>
+            <Form.Item name="password" label="비밀번호" rules={[{ required: true, message: '비밀번호 입력' }]}>
+              <Input.Password size="large" />
+            </Form.Item>
+            <Space direction="vertical" style={{ width: '100%' }}>
+              <Button type="primary" htmlType="submit" size="large" block>로그인</Button>
+              <Button block type="link" onClick={() => setShowAccountForm(false)}>돌아가기</Button>
+            </Space>
+          </Form>
+        )}
+
+        <p style={{ marginTop: 12, fontSize: 12, color: '#999', textAlign: 'center' }}>
+          최초 문주 계정: <b>master / 1234</b> (로그인 후 즉시 변경 권장)
+        </p>
+      </Card>
+    </div>
+  )
+}

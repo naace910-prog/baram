@@ -1,0 +1,23 @@
+### OS / IDE ###
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.iml
+*.log
+
+### Node ###
+node_modules/
+dist/
+.vite/
+*.local
+
+### Java ###
+target/
+*.class
+*.jar
+*.war
+!maven-wrapper.jar
+
+### Spring Boot H2 DB (배포 시엔 유지 여부 결정) ###
+backend/data/
