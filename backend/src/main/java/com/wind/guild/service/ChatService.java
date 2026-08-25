@@ -3,6 +3,7 @@ package com.wind.guild.service;
 import com.wind.guild.domain.ChatMessage;
 import com.wind.guild.domain.ChatOrigin;
 import com.wind.guild.repository.ChatMessageRepository;
+import com.wind.guild.repository.MemberRepository;
 import com.wind.guild.web.dto.ChatDto;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
@@ -19,6 +20,17 @@ public class ChatService {
     private final ChatMessageRepository repo;
     private final ChatBroadcaster broadcaster;
     private final ChatDiscordBridge bridge;
+    private final MemberRepository memberRepo;
+
+    private boolean isStarred(Long memberId) {
+        if (memberId == null) return false;
+        return memberRepo.findById(memberId).map(m -> m.isStarred()).orElse(false);
+    }
+
+    private boolean isStarredByDiscord(String discordUserId) {
+        if (discordUserId == null || discordUserId.isBlank()) return false;
+        return memberRepo.findByDiscordUserId(discordUserId).map(m -> m.isStarred()).orElse(false);
+    }
 
     @Transactional(readOnly = true)
     public List<ChatDto.MessageView> recent(int limit) {
@@ -42,6 +54,7 @@ public class ChatService {
                 .content(content.trim())
                 .authorMemberId(memberId)
                 .authorNickname(nickname)
+                .authorStarred(isStarred(memberId))
                 .origin(ChatOrigin.SITE)
                 .build());
         ChatDto.MessageView view = ChatDto.MessageView.of(m);
@@ -75,6 +88,7 @@ public class ChatService {
                 .content(content == null ? "" : (content.length() > 2000 ? content.substring(0, 2000) : content))
                 .authorDiscordId(discordUserId)
                 .authorNickname(nickname == null ? "Discord유저" : nickname)
+                .authorStarred(isStarredByDiscord(discordUserId))
                 .origin(ChatOrigin.DISCORD)
                 .discordMessageId(discordMessageId)
                 .build());

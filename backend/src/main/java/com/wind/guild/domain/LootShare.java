@@ -29,4 +29,13 @@ public class LootShare {
 
     @Column
     private LocalDateTime paidAt;
+
+    @Column(name = "paid_by")
+    private Long paidBy;
+
+    @Column(nullable = false)
+    private boolean received;
+
+    @Column
+    private LocalDateTime receivedAt;
 }

@@ -55,7 +55,7 @@ export default function RaidCreatePage() {
 
           <Form.Item name="scheduledAt" label="시간" rules={[{ required: true, message: '선택' }]}>
             <DatePicker
-              showTime={{ format: 'HH:mm', minuteStep: 5 }}
+              showTime={{ format: 'HH:mm', minuteStep: 1 }}
               format="YYYY-MM-DD HH:mm"
               size="large"
               style={{ width: '100%' }}

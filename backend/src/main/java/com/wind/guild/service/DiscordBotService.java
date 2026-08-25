@@ -79,7 +79,9 @@ public class DiscordBotService extends ListenerAdapter {
             // 서버 기동 완료 알림
             TextChannel ch = notifyChannel();
             if (ch != null) {
-                String msg = "🟢 서버 기동 완료 · " + LocalDateTime.now().format(DateTimeFormatter.ofPattern("MM/dd HH:mm:ss"));
+                String msg = "🟢 **서버 기동 완료 " + com.wind.guild.config.AppVersion.VERSION + "** · "
+                        + LocalDateTime.now().format(DateTimeFormatter.ofPattern("MM/dd HH:mm:ss"))
+                        + "\n\n**이번 배포 변경사항**\n" + com.wind.guild.config.AppVersion.CHANGELOG;
                 ch.sendMessage(msg).queue(null, err -> log.debug("boot notify send failed: {}", err.toString()));
             }
         } catch (Exception e) {

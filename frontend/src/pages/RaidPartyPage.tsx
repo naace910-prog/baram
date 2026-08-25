@@ -34,6 +34,34 @@ export default function RaidPartyPage() {
   const [activeDrag, setActiveDrag] = useState<{ memberId?: number; freeName?: string; nickname: string } | null>(null)
   const [creating, setCreating] = useState(false)
   const [autoFill, setAutoFill] = useState<{ open: boolean; partyId?: number; role?: string }>({ open: false })
+  const [autoAssigning, setAutoAssigning] = useState(false)
+
+  const autoAssignFromPrev = () => {
+    modal.confirm({
+      title: '직전 같은 대상 파티 승계',
+      content: (
+        <div>
+          <div>가장 최근 같은 대상 레이드의 파티 편성을 <b>그대로 승계</b>합니다.</div>
+          <div style={{ marginTop: 8, color: '#ff4d4f' }}>⚠️ 현재 편성된 파티 · 멤버는 모두 삭제 · 재구성됩니다</div>
+          <div style={{ marginTop: 8 }}>이번 레이드에 <b>YES 투표한 문파원만</b> 배치됩니다. 직전에 있었지만 지금 미투표인 사람은 제외.</div>
+        </div>
+      ),
+      okText: '승계 실행',
+      cancelText: '취소',
+      onOk: async () => {
+        setAutoAssigning(true)
+        try {
+          const r = await partyApi.autoAssign(raidId)
+          message.success(`승계 완료 · ${r.carriedParties}파티 · ${r.assignedMembers}명 · 신규 ${r.newcomerCount}명 · 이탈 ${r.droppedFromPrev}명`)
+          qc.invalidateQueries({ queryKey: ['parties', raidId] })
+        } catch (e: any) {
+          message.error(e?.response?.data?.error ?? '승계 실패')
+        } finally {
+          setAutoAssigning(false)
+        }
+      },
+    })
+  }
 
   useEffect(() => {
     const d: Draft = {}
@@ -178,7 +206,10 @@ export default function RaidPartyPage() {
           <h2 style={{ margin: 0 }}>파티 편성 · {raid.targetIcon ?? '🎯'} {raid.targetName} · {dayjs(raid.scheduledAt).format('MM/DD HH:mm')}</h2>
         </Space>
         {master && (
-          <Space>
+          <Space wrap>
+            <Button onClick={autoAssignFromPrev} loading={autoAssigning}>
+              🤖 직전 파티 승계
+            </Button>
             {parties.length > 0 && (
               <Button onClick={() => setAutoFill({ open: true, partyId: parties[0].id, role: roles[0]?.name })}>
                 YES 자동 배치

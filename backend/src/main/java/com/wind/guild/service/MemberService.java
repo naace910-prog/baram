@@ -1,6 +1,7 @@
 package com.wind.guild.service;
 
 import com.wind.guild.domain.Member;
+import com.wind.guild.domain.MemberRole;
 import com.wind.guild.repository.MemberRepository;
 import com.wind.guild.web.dto.MemberDto;
 import lombok.RequiredArgsConstructor;
@@ -77,5 +78,15 @@ public class MemberService {
         if (trimmed.length() > 40) throw new IllegalArgumentException("닉네임은 40자 이내로 입력해주세요");
         m.setNickname(trimmed);
         return trimmed;
+    }
+
+    public MemberDto.View setStarred(Long id, boolean starred) {
+        Member m = memberRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("문파원 없음: " + id));
+        if (starred && m.getRole() != MemberRole.MASTER) {
+            throw new IllegalStateException("문주 권한을 가진 문파원만 중요 표시할 수 있습니다");
+        }
+        m.setStarred(starred);
+        return MemberDto.View.of(m);
     }
 }

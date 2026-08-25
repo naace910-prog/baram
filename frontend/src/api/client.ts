@@ -47,6 +47,8 @@ export const memberApi = {
     http.put<Member>(`/members/${id}`, body).then((r) => r.data),
   resetPassword: (id: number, newPassword: string) =>
     http.post(`/members/${id}/reset-password`, { newPassword }).then(() => true),
+  setStarred: (id: number, starred: boolean) =>
+    http.post<Member>(`/members/${id}/starred`, { starred }).then((r) => r.data),
 }
 
 export const targetApi = {
@@ -120,6 +122,17 @@ export const partyApi = {
   delete: (partyId: number) => http.delete(`/parties/${partyId}`).then(() => true),
   replaceMembers: (partyId: number, members: PartyMemberEntry[]) =>
     http.put<PartyView>(`/parties/${partyId}/members`, { members }).then((r) => r.data),
+  autoAssign: (raidId: number) =>
+    http.post<{
+      basis: string
+      previousRaidId: number
+      previousScheduledAt: string
+      carriedParties: number
+      assignedMembers: number
+      newcomerCount: number
+      droppedFromPrev: number
+      parties: PartyView[]
+    }>(`/raids/${raidId}/parties/auto-assign`).then((r) => r.data),
 }
 
 export const lootApi = {
@@ -136,6 +149,8 @@ export const lootApi = {
     http.post<Loot[]>(`/raids/${raidId}/loots/${lootId}/distribute`, { memberIds }).then((r) => r.data),
   markPaid: (raidId: number, lootId: number, shareId: number, paid: boolean) =>
     http.post<Loot[]>(`/raids/${raidId}/loots/${lootId}/shares/${shareId}/paid`, { shareId, paid }).then((r) => r.data),
+  markReceived: (raidId: number, lootId: number, shareId: number, received: boolean) =>
+    http.post<Loot[]>(`/raids/${raidId}/loots/${lootId}/shares/${shareId}/received`, { shareId, received }).then((r) => r.data),
   updateShareAmount: (raidId: number, lootId: number, shareId: number, amount: number) =>
     http.put<Loot[]>(`/raids/${raidId}/loots/${lootId}/shares/${shareId}`, { amount }).then((r) => r.data),
 }

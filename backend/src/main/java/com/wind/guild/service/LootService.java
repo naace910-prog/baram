@@ -30,9 +30,13 @@ public class LootService {
     @Transactional(readOnly = true)
     public List<LootDto.LootView> listByRaid(Long raidId) {
         List<RaidLoot> loots = lootRepository.findByRaidId(raidId);
-        List<Long> memberIds = loots.stream()
-                .flatMap(l -> shareRepository.findByLootId(l.getId()).stream())
-                .map(LootShare::getMemberId).distinct().toList();
+        List<LootShare> allShares = loots.stream()
+                .flatMap(l -> shareRepository.findByLootId(l.getId()).stream()).toList();
+        Set<Long> memberIds = new HashSet<>();
+        for (LootShare s : allShares) {
+            memberIds.add(s.getMemberId());
+            if (s.getPaidBy() != null) memberIds.add(s.getPaidBy());
+        }
         Map<Long, String> nickMap = memberRepository.findAllById(memberIds).stream()
                 .collect(Collectors.toMap(Member::getId, Member::getNickname));
 
@@ -51,7 +55,9 @@ public class LootService {
                 .map(s -> new LootDto.ShareView(
                         s.getId(), s.getMemberId(),
                         nickMap.getOrDefault(s.getMemberId(), "?"),
-                        s.getShare(), s.isPaid(), s.getPaidAt()))
+                        s.getShare(), s.isPaid(), s.getPaidAt(),
+                        s.getPaidBy() != null ? nickMap.get(s.getPaidBy()) : null,
+                        s.isReceived(), s.getReceivedAt()))
                 .toList();
         RaidTarget t = l.getTargetId() != null ? targetMap.get(l.getTargetId()) : null;
         return new LootDto.LootView(
@@ -130,11 +136,29 @@ public class LootService {
         }
     }
 
-    public void markPaid(Long shareId, boolean paid) {
+    public void markPaid(Long shareId, boolean paid, Long actorMemberId) {
         LootShare s = shareRepository.findById(shareId)
                 .orElseThrow(() -> new IllegalArgumentException("분배 없음: " + shareId));
         s.setPaid(paid);
         s.setPaidAt(paid ? LocalDateTime.now() : null);
+        s.setPaidBy(paid ? actorMemberId : null);
+        if (!paid) {
+            s.setReceived(false);
+            s.setReceivedAt(null);
+        }
+    }
+
+    public void markReceived(Long shareId, boolean received, Long actorMemberId) {
+        LootShare s = shareRepository.findById(shareId)
+                .orElseThrow(() -> new IllegalArgumentException("분배 없음: " + shareId));
+        if (!Objects.equals(s.getMemberId(), actorMemberId)) {
+            throw new IllegalStateException("본인의 분배금만 수령 확인할 수 있습니다");
+        }
+        if (received && !s.isPaid()) {
+            throw new IllegalStateException("아직 지급되지 않았습니다");
+        }
+        s.setReceived(received);
+        s.setReceivedAt(received ? LocalDateTime.now() : null);
     }
 
     public void updateShareAmount(Long shareId, long amount) {

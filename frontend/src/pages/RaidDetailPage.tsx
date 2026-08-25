@@ -241,8 +241,8 @@ export default function RaidDetailPage() {
                     size="small" pagination={false} rowKey="id"
                     dataSource={l.shares}
                     columns={[
-                      { title: '문파원', dataIndex: 'nickname' },
-                      { title: '분배액', dataIndex: 'share', width: 180,
+                      { title: '문파원', dataIndex: 'nickname', width: 100 },
+                      { title: '분배액', dataIndex: 'share', width: 160,
                         render: (v: number, s: any) => (
                           <ShareAmountEdit
                             amount={v}
@@ -253,16 +253,55 @@ export default function RaidDetailPage() {
                           />
                         ) },
                       {
-                        title: '정산', dataIndex: 'paid',
-                        render: (paid: boolean, s) => (
-                          <Switch
-                            checked={paid}
-                            onChange={async (c) => {
-                              await lootApi.markPaid(raidId, l.id, s.id, c)
-                              qc.invalidateQueries({ queryKey: ['loots', raidId] })
-                            }}
-                          />
+                        title: '지급(문주)', dataIndex: 'paid', width: 160,
+                        render: (paid: boolean, s: any) => (
+                          <Space direction="vertical" size={0}>
+                            <Switch
+                              checked={paid}
+                              disabled={!isMaster(user)}
+                              onChange={async (c) => {
+                                await lootApi.markPaid(raidId, l.id, s.id, c)
+                                qc.invalidateQueries({ queryKey: ['loots', raidId] })
+                              }}
+                            />
+                            {paid && s.paidAt && (
+                              <span style={{ fontSize: 11, color: '#8c8c8c' }}>
+                                {dayjs(s.paidAt).format('MM/dd HH:mm')}
+                                {s.paidByNickname ? ` · ${s.paidByNickname}` : ''}
+                              </span>
+                            )}
+                          </Space>
                         )
+                      },
+                      {
+                        title: '수령(본인)', dataIndex: 'received', width: 160,
+                        render: (received: boolean, s: any) => {
+                          const isMe = s.memberId === user?.memberId
+                          return (
+                            <Space direction="vertical" size={0}>
+                              <Switch
+                                checked={received}
+                                disabled={!isMe || !s.paid}
+                                onChange={async (c) => {
+                                  try {
+                                    await lootApi.markReceived(raidId, l.id, s.id, c)
+                                    qc.invalidateQueries({ queryKey: ['loots', raidId] })
+                                  } catch (e: any) {
+                                    message.error(e?.response?.data?.error ?? '수령 처리 실패')
+                                  }
+                                }}
+                              />
+                              {received && s.receivedAt && (
+                                <span style={{ fontSize: 11, color: '#52c41a' }}>
+                                  ✓ {dayjs(s.receivedAt).format('MM/dd HH:mm')}
+                                </span>
+                              )}
+                              {!isMe && !received && (
+                                <span style={{ fontSize: 11, color: '#bfbfbf' }}>본인만</span>
+                              )}
+                            </Space>
+                          )
+                        }
                       },
                     ]}
                   />

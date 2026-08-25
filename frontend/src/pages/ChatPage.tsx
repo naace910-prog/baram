@@ -240,6 +240,7 @@ function MessageBubble({ msg, isMe, hideHeader, onCopy }: {
       <div style={{ maxWidth: '70%', minWidth: 0 }}>
         {!hideHeader && (
           <div style={{ fontSize: 12, color: '#232323', marginBottom: 2, fontWeight: 500, marginLeft: 2 }}>
+            {msg.authorStarred && <span style={{ color: '#faad14', marginRight: 2 }}>⭐</span>}
             {msg.authorNickname}
             {fromDiscord && (
               <span style={{

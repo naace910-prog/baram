@@ -28,7 +28,8 @@ public class ChatDiscordBridge {
         TextChannel ch = bot.chatChannel();
         if (ch == null) return;
         try {
-            String text = "**" + msg.authorNickname() + "** (사이트): " + msg.content();
+            String starPrefix = msg.authorStarred() ? "⭐ " : "";
+            String text = starPrefix + "**" + msg.authorNickname() + "** (사이트): " + msg.content();
             ch.sendMessage(text).queue(null, err -> log.debug("chat relay failed: {}", err.toString()));
         } catch (Exception e) {
             log.debug("chat relay error: {}", e.toString());

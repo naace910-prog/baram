@@ -4,6 +4,7 @@ import com.wind.guild.domain.ChannelType;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 public class PartyDto {
@@ -32,4 +33,14 @@ public class PartyDto {
             @NotBlank String role, Long memberId, String freeName) {}
 
     public record MembersReplaceRequest(@NotNull List<MemberEntry> members) {}
+
+    public record AutoAssignResult(
+            String basis,
+            Long previousRaidId,
+            LocalDateTime previousScheduledAt,
+            int carriedParties,
+            int assignedMembers,
+            int newcomerCount,
+            int droppedFromPrev,
+            List<PartyView> parties) {}
 }

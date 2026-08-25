@@ -34,6 +34,9 @@ public class Member {
     private boolean active;
 
     @Column(nullable = false)
+    private boolean starred;
+
+    @Column(nullable = false)
     private LocalDateTime joinedAt;
 
     @PrePersist

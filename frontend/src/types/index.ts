@@ -22,6 +22,7 @@ export interface Member {
   role: MemberRole
   discordUserId?: string | null
   active: boolean
+  starred: boolean
   joinedAt: string
 }
 
@@ -79,6 +80,9 @@ export interface LootShare {
   share: number
   paid: boolean
   paidAt?: string | null
+  paidByNickname?: string | null
+  received: boolean
+  receivedAt?: string | null
 }
 
 export interface Loot {
@@ -187,6 +191,7 @@ export interface ChatMessage {
   authorMemberId?: number | null
   authorDiscordId?: string | null
   authorNickname: string
+  authorStarred: boolean
   origin: ChatOrigin
   actionType?: string | null
   actionRefId?: number | null

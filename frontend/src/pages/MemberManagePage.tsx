@@ -39,8 +39,28 @@ export default function MemberManagePage() {
           pagination={{ pageSize: 20 }}
           columns={[
             { title: '계정', dataIndex: 'account', width: 100 },
-            { title: '닉네임', dataIndex: 'nickname', width: 120 },
+            { title: '닉네임', dataIndex: 'nickname', width: 140, render: (n: string, m: Member) => (
+              <span>{m.starred && <span style={{ color: '#faad14' }}>⭐ </span>}{n}</span>
+            ) },
             { title: '역할', dataIndex: 'role', width: 90, render: (r: MemberRole) => <Tag color={roleColor[r]}>{r}</Tag> },
+            {
+              title: '⭐ 중요', dataIndex: 'starred', width: 80,
+              render: (starred: boolean, m: Member) => (
+                <Switch
+                  size="small"
+                  checked={starred}
+                  disabled={m.role !== 'MASTER'}
+                  onChange={async (c) => {
+                    try {
+                      await memberApi.setStarred(m.id, c)
+                      qc.invalidateQueries({ queryKey: ['members'] })
+                    } catch (e: any) {
+                      message.error(e?.response?.data?.error ?? '변경 실패')
+                    }
+                  }}
+                />
+              )
+            },
             { title: '디스코드ID', dataIndex: 'discordUserId', width: 150 },
             { title: '활성', dataIndex: 'active', width: 60, render: (a: boolean) => a ? '✅' : '❌' },
             { title: '가입일', dataIndex: 'joinedAt', width: 120, render: (v: string) => dayjs(v).format('YYYY-MM-DD') },

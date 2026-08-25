@@ -36,4 +36,9 @@ public class MemberController {
         memberService.resetPassword(id, body.getOrDefault("newPassword", "1234"));
         return Map.of("result", "ok");
     }
+
+    @PostMapping("/{id}/starred")
+    public MemberDto.View setStarred(@PathVariable Long id, @RequestBody Map<String, Boolean> body) {
+        return memberService.setStarred(id, Boolean.TRUE.equals(body.get("starred")));
+    }
 }

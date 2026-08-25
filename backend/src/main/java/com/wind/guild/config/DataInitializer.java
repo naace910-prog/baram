@@ -57,6 +57,18 @@ public class DataInitializer implements CommandLineRunner {
         runSchemaFix("raid_parties_channel_type_check",
                 "ALTER TABLE raid_parties DROP CONSTRAINT IF EXISTS raid_parties_channel_type_check");
 
+        // v1.0.12: 신규 컬럼 (NOT NULL) 은 기존 행 때문에 Hibernate ddl-auto 로 추가 불가 → DEFAULT 로 사전 추가
+        runSchemaFix("members_starred",
+                "ALTER TABLE members ADD COLUMN IF NOT EXISTS starred BOOLEAN NOT NULL DEFAULT FALSE");
+        runSchemaFix("chat_messages_author_starred",
+                "ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS author_starred BOOLEAN NOT NULL DEFAULT FALSE");
+        runSchemaFix("loot_shares_received",
+                "ALTER TABLE loot_shares ADD COLUMN IF NOT EXISTS received BOOLEAN NOT NULL DEFAULT FALSE");
+        runSchemaFix("loot_shares_received_at",
+                "ALTER TABLE loot_shares ADD COLUMN IF NOT EXISTS received_at TIMESTAMP");
+        runSchemaFix("loot_shares_paid_by",
+                "ALTER TABLE loot_shares ADD COLUMN IF NOT EXISTS paid_by BIGINT");
+
         if (memberRepository.count() == 0) {
             memberRepository.save(Member.builder()
                     .account("master")

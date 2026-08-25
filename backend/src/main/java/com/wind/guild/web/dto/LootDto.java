@@ -35,11 +35,16 @@ public class LootDto {
             String nickname,
             Long share,
             boolean paid,
-            LocalDateTime paidAt) {}
+            LocalDateTime paidAt,
+            String paidByNickname,
+            boolean received,
+            LocalDateTime receivedAt) {}
 
     public record DistributeRequest(@NotNull List<Long> memberIds) {}
 
     public record MarkPaidRequest(@NotNull Long shareId, boolean paid) {}
+
+    public record MarkReceivedRequest(@NotNull Long shareId, boolean received) {}
 
     public record UpdateShareAmountRequest(@NotNull @Min(0) Long amount) {}
 

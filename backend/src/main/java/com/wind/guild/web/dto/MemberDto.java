@@ -29,10 +29,11 @@ public class MemberDto {
             MemberRole role,
             String discordUserId,
             boolean active,
+            boolean starred,
             LocalDateTime joinedAt) {
         public static View of(Member m) {
             return new View(m.getId(), m.getAccount(), m.getNickname(),
-                    m.getRole(), m.getDiscordUserId(), m.isActive(), m.getJoinedAt());
+                    m.getRole(), m.getDiscordUserId(), m.isActive(), m.isStarred(), m.getJoinedAt());
         }
     }
 }

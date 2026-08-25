@@ -15,6 +15,7 @@ public class ChatDto {
             Long authorMemberId,
             String authorDiscordId,
             String authorNickname,
+            boolean authorStarred,
             ChatOrigin origin,
             String actionType,
             Long actionRefId,
@@ -24,7 +25,7 @@ public class ChatDto {
             return new MessageView(
                     m.getId(), m.getContent(),
                     m.getAuthorMemberId(), m.getAuthorDiscordId(),
-                    m.getAuthorNickname(), m.getOrigin(),
+                    m.getAuthorNickname(), m.isAuthorStarred(), m.getOrigin(),
                     m.getActionType(), m.getActionRefId(),
                     m.getCreatedAt());
         }

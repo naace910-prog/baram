@@ -1,5 +1,6 @@
 package com.wind.guild.web;
 
+import com.wind.guild.config.SessionKeys;
 import com.wind.guild.repository.LootShareRepository;
 import com.wind.guild.repository.MemberRepository;
 import com.wind.guild.repository.RaidLootRepository;
@@ -8,6 +9,7 @@ import com.wind.guild.service.DiscordNotifier;
 import com.wind.guild.service.LootService;
 import com.wind.guild.service.WebPushService;
 import com.wind.guild.web.dto.LootDto;
+import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -93,18 +95,45 @@ public class LootController {
     public List<LootDto.LootView> markPaid(@PathVariable Long raidId,
                                            @PathVariable Long lootId,
                                            @PathVariable Long shareId,
-                                           @RequestBody LootDto.MarkPaidRequest req) {
-        lootService.markPaid(shareId, req.paid());
+                                           @RequestBody LootDto.MarkPaidRequest req,
+                                           HttpSession session) {
+        String role = (String) session.getAttribute(SessionKeys.MEMBER_ROLE);
+        if (!"MASTER".equals(role) && !"VICE".equals(role)) {
+            throw new IllegalStateException("문주/부문주만 지급 처리 가능합니다");
+        }
+        Long actorId = (Long) session.getAttribute(SessionKeys.MEMBER_ID);
+        lootService.markPaid(shareId, req.paid(), actorId);
         discord.syncLootCard(lootId, DiscordNotifier.LootTrigger.PAID_CHANGED);
         discord.syncRaidCard(raidId, DiscordNotifier.RaidTrigger.VOTE);
         if (req.paid()) {
             shareRepo.findById(shareId).ifPresent(s -> {
                 push.sendToMember(s.getMemberId(),
-                        "💰 정산 완료",
-                        MONEY.format(s.getShare()) + "전 정산되었습니다",
+                        "💰 정산 완료 · 수령 확인 요망",
+                        MONEY.format(s.getShare()) + "전이 지급 처리되었습니다. 앱에서 수령 확인을 눌러주세요.",
                         "/raids/" + raidId);
                 String nick = memberRepo.findById(s.getMemberId()).map(m -> m.getNickname()).orElse("?");
-                chat.saveSystem("💵 정산 완료: " + nick + " · " + MONEY.format(s.getShare()) + "전");
+                chat.saveSystem("💵 지급 완료: " + nick + " · " + MONEY.format(s.getShare()) + "전 (수령 확인 대기)");
+            });
+        }
+        return lootService.listByRaid(raidId);
+    }
+
+    @PostMapping("/{lootId}/shares/{shareId}/received")
+    public List<LootDto.LootView> markReceived(@PathVariable Long raidId,
+                                               @PathVariable Long lootId,
+                                               @PathVariable Long shareId,
+                                               @RequestBody LootDto.MarkReceivedRequest req,
+                                               HttpSession session) {
+        Long actorId = (Long) session.getAttribute(SessionKeys.MEMBER_ID);
+        if (actorId == null) {
+            throw new IllegalStateException("로그인이 필요합니다");
+        }
+        lootService.markReceived(shareId, req.received(), actorId);
+        discord.syncLootCard(lootId, DiscordNotifier.LootTrigger.PAID_CHANGED);
+        if (req.received()) {
+            shareRepo.findById(shareId).ifPresent(s -> {
+                String nick = memberRepo.findById(s.getMemberId()).map(m -> m.getNickname()).orElse("?");
+                chat.saveSystem("✅ 수령 확인: " + nick + " · " + MONEY.format(s.getShare()) + "전");
             });
         }
         return lootService.listByRaid(raidId);

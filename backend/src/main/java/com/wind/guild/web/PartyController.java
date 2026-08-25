@@ -95,4 +95,17 @@ public class PartyController {
         });
         return view;
     }
+
+    @PostMapping("/api/raids/{raidId}/parties/auto-assign")
+    public PartyDto.AutoAssignResult autoAssign(@PathVariable Long raidId) {
+        PartyDto.AutoAssignResult result = service.autoAssignFromPrevious(raidId);
+        discord.syncRaidCard(raidId, DiscordNotifier.RaidTrigger.PARTY);
+        try {
+            String msg = String.format("🤖 직전 %s 파티 자동배정 · %d파티 · %d명 승계 · 신규 %d명 · 이탈 %d명",
+                    result.basis(), result.carriedParties(), result.assignedMembers(),
+                    result.newcomerCount(), result.droppedFromPrev());
+            chat.saveSystem(msg);
+        } catch (Exception ignored) {}
+        return result;
+    }
 }

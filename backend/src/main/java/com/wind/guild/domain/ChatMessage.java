@@ -30,6 +30,9 @@ public class ChatMessage {
     @Column(nullable = false, length = 60)
     private String authorNickname;
 
+    @Column(nullable = false)
+    private boolean authorStarred;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 10)
     private ChatOrigin origin;
