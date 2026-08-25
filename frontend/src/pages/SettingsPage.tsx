@@ -1,16 +1,49 @@
 import { Alert, Button, Card, Input, Space, Tag, App as AntApp, Form } from 'antd'
-import { BellOutlined, BellFilled, UserOutlined } from '@ant-design/icons'
+import { BellOutlined, BellFilled, UserOutlined, DeleteOutlined } from '@ant-design/icons'
 import { useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { usePush } from '@/hooks/usePush'
-import { useAuth } from '@/store/authStore'
-import { authApi } from '@/api/client'
+import { useAuth, isMaster } from '@/store/authStore'
+import { authApi, adminApi } from '@/api/client'
 
 export default function SettingsPage() {
   const { ready, status, enable, disable } = usePush()
   const { user, fetchMe } = useAuth()
-  const { message } = AntApp.useApp()
+  const { message, modal } = AntApp.useApp()
+  const qc = useQueryClient()
   const [nickname, setNickname] = useState(user?.nickname ?? '')
   const [saving, setSaving] = useState(false)
+  const [resetting, setResetting] = useState(false)
+
+  const resetLoots = () => {
+    modal.confirm({
+      title: '⚠️ 모든 득템·분배 데이터 삭제',
+      content: (
+        <div>
+          <div>DB 의 <b>모든 raid_loots · loot_shares</b> 를 삭제합니다.</div>
+          <div style={{ color: '#ff4d4f', marginTop: 8 }}>
+            판매금액·분배·정산 기록 전부 사라짐 · 통계 · orphan 데이터도 모두 초기화.
+            <br />복구 불가.
+          </div>
+        </div>
+      ),
+      okType: 'danger',
+      okText: '전부 삭제',
+      cancelText: '취소',
+      onOk: async () => {
+        setResetting(true)
+        try {
+          const r = await adminApi.resetLoots()
+          message.success(`삭제 완료: 득템 ${r.deletedLoots}개 · 분배 ${r.deletedShares}건`)
+          qc.invalidateQueries()
+        } catch (e: any) {
+          message.error(e?.response?.data?.error ?? '삭제 실패')
+        } finally {
+          setResetting(false)
+        }
+      }
+    })
+  }
 
   const saveNickname = async () => {
     const trimmed = nickname.trim()
@@ -104,6 +137,23 @@ export default function SettingsPage() {
           </Space>
         )}
       </Card>
+
+      {isMaster(user) && user?.role === 'MASTER' && (
+        <Card
+          title={<><DeleteOutlined style={{ color: '#ff4d4f' }} /> 위험 · 데이터 초기화</>}
+          style={{ marginBottom: 12, borderColor: '#ffccc7' }}
+        >
+          <Alert
+            type="warning" showIcon
+            style={{ marginBottom: 12 }}
+            message="모든 득템·분배 데이터를 삭제합니다"
+            description="테스트 후 잔여 데이터·orphan 정리용. 판매금액·정산 기록 전부 사라짐. 복구 불가."
+          />
+          <Button danger loading={resetting} onClick={resetLoots} icon={<DeleteOutlined />}>
+            모든 득템·분배 삭제
+          </Button>
+        </Card>
+      )}
 
       <Card title="설치 · 홈 화면에 추가">
         <div style={{ color: '#8c8c8c', fontSize: 13 }}>

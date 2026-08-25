@@ -102,7 +102,9 @@ public class DiscordBotService extends ListenerAdapter {
                                 new OptionData(OptionType.STRING, "메모", "선택", false)
                         ),
                 Commands.slash("레이드목록", "예정 레이드 목록 · 참가자 상세"),
-                Commands.slash("레이드결과", "최근 완료 레이드 2건 · 참가자·득템·정산")
+                Commands.slash("레이드결과", "최근 완료 레이드 2건 · 참가자·득템·정산"),
+                Commands.slash("닉네임변경", "본인 닉네임 변경 (사이트와 동기화)")
+                        .addOptions(new OptionData(OptionType.STRING, "닉네임", "새 닉네임 (1~40자)", true))
         ).queue();
     }
 
@@ -120,21 +122,24 @@ public class DiscordBotService extends ListenerAdapter {
 
     @Override
     public void onSlashCommandInteraction(SlashCommandInteractionEvent e) {
+        // 3초 내 응답 규칙 회피: 즉시 defer 후 hook 으로 응답
+        e.deferReply(true).queue();
         try {
             switch (e.getName()) {
                 case "레이드등록" -> handleCreateRaid(e);
                 case "레이드목록" -> handleListRaid(e);
                 case "레이드결과" -> handleRaidResults(e);
+                case "닉네임변경" -> handleChangeNickname(e);
             }
         } catch (Exception ex) {
             log.warn("Slash command failed: {}", ex.toString());
-            if (!e.isAcknowledged()) e.reply("에러: " + ex.getMessage()).setEphemeral(true).queue();
+            try { e.getHook().sendMessage("에러: " + ex.getMessage()).setEphemeral(true).queue(); } catch (Exception ignore) {}
         }
     }
 
     private void handleCreateRaid(SlashCommandInteractionEvent e) {
         if (!isMasterByDiscord(e.getUser().getId())) {
-            e.reply("문주(부문주)만 레이드 등록 가능합니다. Discord ID 가 문파원에 연결돼있는지 확인해주세요.")
+            e.getHook().sendMessage("문주(부문주)만 레이드 등록 가능합니다. Discord ID 가 문파원에 연결돼있는지 확인해주세요.")
                     .setEphemeral(true).queue();
             return;
         }
@@ -145,7 +150,7 @@ public class DiscordBotService extends ListenerAdapter {
         var parsed = resolveTargetOrCategory(targetName);
         if (parsed == null) {
             List<String> known = targetRepository.findAll().stream().map(RaidTarget::getName).toList();
-            e.reply("대상 '" + targetName + "' 을 찾을 수 없습니다.\n"
+            e.getHook().sendMessage("대상 '" + targetName + "' 을 찾을 수 없습니다.\n"
                     + "등록된 대상: " + known + "\n"
                     + "또는 카테고리 키워드: '해골왕' / '어금니' / '용' / '룡'").setEphemeral(true).queue();
             return;
@@ -154,7 +159,7 @@ public class DiscordBotService extends ListenerAdapter {
         try {
             when = parseWhen(timeStr);
         } catch (Exception ex) {
-            e.reply("시간 형식이 잘못됐습니다. HH:mm 또는 MM/dd HH:mm").setEphemeral(true).queue();
+            e.getHook().sendMessage("시간 형식이 잘못됐습니다. HH:mm 또는 MM/dd HH:mm").setEphemeral(true).queue();
             return;
         }
         var raid = raidService.create(new RaidDto.CreateRequest(
@@ -163,7 +168,7 @@ public class DiscordBotService extends ListenerAdapter {
                 when, memo));
         String label = parsed.target() != null ? parsed.target().getName()
                 : (parsed.category() == RaidCategory.FANG ? "🐲 어금니 레이드" : "레이드");
-        e.reply("레이드 등록됨: " + label + " · " + when.format(DateTimeFormatter.ofPattern("MM/dd HH:mm")))
+        e.getHook().sendMessage("레이드 등록됨: " + label + " · " + when.format(DateTimeFormatter.ofPattern("MM/dd HH:mm")))
                 .setEphemeral(true).queue();
         DiscordNotifier n = notifier(); if (n != null) n.notifyRaidCreated(raid.getId());
     }
@@ -174,7 +179,7 @@ public class DiscordBotService extends ListenerAdapter {
                 .limit(2)
                 .toList();
         if (done.isEmpty()) {
-            e.reply("완료된 레이드가 아직 없습니다").setEphemeral(true).queue();
+            e.getHook().sendMessage("완료된 레이드가 아직 없습니다").setEphemeral(true).queue();
             return;
         }
         java.util.Set<Long> mids = new java.util.HashSet<>();
@@ -239,6 +244,29 @@ public class DiscordBotService extends ListenerAdapter {
         String out = sb.toString();
         if (out.length() > 1900) out = out.substring(0, 1897) + "...";
         e.reply(out).setEphemeral(true).queue();
+    }
+
+    private void handleChangeNickname(SlashCommandInteractionEvent e) {
+        String discordId = e.getUser().getId();
+        var found = memberRepository.findByDiscordUserId(discordId);
+        if (found.isEmpty()) {
+            e.getHook().sendMessage("이 Discord 계정이 문파원에 연결되지 않았습니다.\n"
+                    + "사이트에서 'Discord로 로그인' 하거나 문주에게 등록 요청하세요.").setEphemeral(true).queue();
+            return;
+        }
+        String newNick = e.getOption("닉네임").getAsString();
+        try {
+            var m = found.get();
+            String trimmed = newNick == null ? "" : newNick.trim();
+            if (trimmed.isEmpty()) { e.getHook().sendMessage("닉네임 입력 필요").setEphemeral(true).queue(); return; }
+            if (trimmed.length() > 40) { e.getHook().sendMessage("40자 이내로 입력").setEphemeral(true).queue(); return; }
+            String before = m.getNickname();
+            m.setNickname(trimmed);
+            memberRepository.save(m);
+            e.getHook().sendMessage("✅ 닉네임 변경: " + before + " → " + trimmed).setEphemeral(true).queue();
+        } catch (Exception ex) {
+            e.getHook().sendMessage("변경 실패: " + ex.getMessage()).setEphemeral(true).queue();
+        }
     }
 
     private boolean isMasterByDiscord(String discordUserId) {
@@ -339,19 +367,20 @@ public class DiscordBotService extends ListenerAdapter {
     public void onButtonInteraction(ButtonInteractionEvent e) {
         String id = e.getComponentId();
         if (!id.startsWith("raid:vote:")) return;
+        e.deferReply(true).queue();
         String[] parts = id.split(":");
         try {
             Long raidId = Long.parseLong(parts[2]);
             VoteType vote = VoteType.valueOf(parts[3]);
             String discordUserId = e.getUser().getId();
             raidService.voteByDiscordUser(raidId, discordUserId, vote);
-            e.reply("투표 반영됨: " + vote).setEphemeral(true).queue();
+            e.getHook().sendMessage("투표 반영됨: " + vote).setEphemeral(true).queue();
             DiscordNotifier n = notifier(); if (n != null) n.updateEmbed(raidId);
         } catch (IllegalStateException ex) {
-            e.reply("⚠ " + ex.getMessage()).setEphemeral(true).queue();
+            e.getHook().sendMessage("⚠ " + ex.getMessage()).setEphemeral(true).queue();
         } catch (Exception ex) {
             log.warn("Button interaction failed: {}", ex.toString());
-            e.reply("에러: " + ex.getMessage()).setEphemeral(true).queue();
+            e.getHook().sendMessage("에러: " + ex.getMessage()).setEphemeral(true).queue();
         }
     }
 

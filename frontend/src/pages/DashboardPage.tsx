@@ -14,9 +14,8 @@ export default function DashboardPage() {
   const { data: raids = [] } = useQuery({ queryKey: ['raids'], queryFn: raidApi.list })
   const { data: stats } = useQuery({ queryKey: ['stats'], queryFn: statsApi.get })
 
-  const now = dayjs()
   const upcoming = raids
-    .filter((r) => r.status === 'PLANNED' && dayjs(r.scheduledAt).isAfter(now))
+    .filter((r) => r.status === 'PLANNED')
     .sort((a, b) => (dayjs(a.scheduledAt).isAfter(b.scheduledAt) ? 1 : -1))
   const past = raids.filter((r) => r.status === 'DONE')
 

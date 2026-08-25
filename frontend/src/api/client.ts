@@ -85,6 +85,12 @@ export const chatApi = {
     http.post<ChatMessage>('/chat/messages', { content }).then((r) => r.data),
 }
 
+export const adminApi = {
+  resetLoots: () =>
+    http.post<{ result: string; deletedShares: number; deletedLoots: number }>('/admin/reset-loots')
+        .then((r) => r.data),
+}
+
 export const pushApi = {
   vapidKey: () =>
     http.get<{ enabled: boolean; publicKey: string }>('/push/vapid-key').then((r) => r.data),

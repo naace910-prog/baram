@@ -33,6 +33,7 @@ export default function RaidDetailPage() {
     open: false, picked: [],
   })
   const [bulkModal, setBulkModal] = useState(false)
+  const [statusPending, setStatusPending] = useState(false)
 
   if (!raid) return null
 
@@ -45,7 +46,6 @@ export default function RaidDetailPage() {
     qc.invalidateQueries({ queryKey: ['raids'] })
   }
 
-  const [statusPending, setStatusPending] = useState(false)
   const changeStatus = async (s: RaidStatus) => {
     if (s === raid.status || statusPending) return
     setStatusPending(true)
