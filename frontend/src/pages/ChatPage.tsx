@@ -188,11 +188,10 @@ function MessageBubble({ msg, isMe, onCopy }: { msg: ChatMessage; isMe: boolean;
         alignItems: isMe ? 'flex-end' : 'flex-start',
         maxWidth: 'calc(100% - 60px)', minWidth: 0,
       }}>
-        {/* 이름 · 배지 (시간은 말풍선 옆으로 이동) */}
+        {/* 이름 · 배지 - 항상 name → badge 순서 */}
         <div style={{
           fontSize: 11, color: '#606770', marginBottom: 3,
           display: 'flex', gap: 5, alignItems: 'center',
-          flexDirection: isMe ? 'row-reverse' : 'row',
         }}>
           <span style={{ color: '#050505', fontWeight: 600 }}>{msg.authorNickname}</span>
           <span style={{
