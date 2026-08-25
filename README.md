@@ -113,8 +113,211 @@ fly deploy
 
 **Railway.app**: 마찬가지로 GitHub 연결, `nixpacks` 자동 빌드
 
-### C. 오라클 클라우드 프리 티어 VM
-- Ubuntu VM 생성 → JDK 21 설치 → 위 A와 동일하게 실행 → 방화벽 8080 열기
+### C. Oracle Cloud Free VM (권장 · 무료 상시)
+
+Oracle Cloud Always Free 는 **Linux VM만 무료**입니다 (Windows Server는 유료).
+Ubuntu 22.04 기준 절차 — 이대로 하면 SSL·자동재시작·리버스프록시까지 완성됩니다.
+
+#### C-1. Oracle Cloud VM 만들기
+
+1. https://cloud.oracle.com 접속 → 계정 만들기 (신용카드 검증 필요, 청구 없음)
+2. Compute → Instances → **Create Instance**
+   - Image: **Canonical Ubuntu 22.04**
+   - Shape: **VM.Standard.A1.Flex** (Always Free · ARM · 4 OCPU / 24GB RAM)
+     - 이게 안 뜨면 **VM.Standard.E2.1.Micro** (AMD · 1 OCPU / 1GB RAM)
+   - Networking: Assign a public IPv4 address ✅
+   - SSH keys: Generate a key pair for me → **private key 다운로드해서 안전한 곳에 저장**
+3. 인스턴스 생성되면 **Public IP** 복사
+
+#### C-2. Security List (방화벽) 열기
+
+Networking → Virtual Cloud Networks → VCN 선택 → Security Lists → Default → **Add Ingress Rules**
+
+| Source CIDR | Protocol | Port | 용도 |
+|---|---|---|---|
+| 0.0.0.0/0 | TCP | 80  | HTTP |
+| 0.0.0.0/0 | TCP | 443 | HTTPS |
+
+(8080은 열지 않음 · nginx가 내부에서 프록시)
+
+#### C-3. VM 접속 & 필수 패키지 설치
+
+로컬(내 PC)에서:
+```bash
+chmod 400 ~/Downloads/ssh-key-*.key
+ssh -i ~/Downloads/ssh-key-*.key ubuntu@VM공인IP
+```
+
+VM 안에서:
+```bash
+sudo apt update && sudo apt upgrade -y
+sudo apt install -y openjdk-21-jdk maven git nginx certbot python3-certbot-nginx
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs
+
+# Ubuntu 자체 방화벽도 열기 (Oracle Security List와 별개)
+sudo ufw allow OpenSSH
+sudo ufw allow 'Nginx Full'
+sudo ufw --force enable
+
+java -version   # openjdk 21 확인
+node -v         # v20 확인
+```
+
+#### C-4. 코드 받기 · 빌드
+
+```bash
+cd /opt
+sudo git clone https://github.com/naace910-prog/baram.git wind-guild
+sudo chown -R ubuntu:ubuntu wind-guild
+cd wind-guild
+
+# 프론트 빌드 → Spring Boot static 폴더에 복사
+cd frontend
+npm ci
+npm run build
+mkdir -p ../backend/src/main/resources/static
+cp -r dist/* ../backend/src/main/resources/static/
+
+# 백엔드 fat jar 빌드
+cd ../backend
+mvn -DskipTests package
+ls -lh target/*.jar   # guild-backend-0.0.1-SNAPSHOT.jar 확인
+```
+
+#### C-5. 환경변수 파일
+
+```bash
+sudo mkdir -p /etc/wind-guild
+sudo tee /etc/wind-guild/env > /dev/null <<'EOF'
+DISCORD_ENABLED=true
+DISCORD_BOT_TOKEN=여기에봇토큰
+DISCORD_GUILD_ID=여기에서버ID
+DISCORD_NOTIFY_CHANNEL_ID=여기에채널ID
+DISCORD_CLIENT_ID=여기에클라이언트ID
+DISCORD_CLIENT_SECRET=여기에클라이언트시크릿
+DISCORD_OAUTH_REDIRECT_URI=https://내도메인/api/auth/discord/callback
+DISCORD_OAUTH_SUCCESS_REDIRECT=https://내도메인/
+SITE_BASE_URL=https://내도메인
+EOF
+sudo chmod 600 /etc/wind-guild/env
+```
+
+⚠ Discord Developer Portal → OAuth2 → Redirects 에도 **정확히 같은 URL** 추가해야 합니다.
+
+#### C-6. systemd 서비스로 등록 (자동 재시작·부팅시 시작)
+
+```bash
+sudo tee /etc/systemd/system/wind-guild.service > /dev/null <<'EOF'
+[Unit]
+Description=Wind Guild Web
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/opt/wind-guild/backend
+EnvironmentFile=/etc/wind-guild/env
+ExecStart=/usr/bin/java -Xmx512m -jar /opt/wind-guild/backend/target/guild-backend-0.0.1-SNAPSHOT.jar
+Restart=always
+RestartSec=10
+StandardOutput=append:/var/log/wind-guild.log
+StandardError=append:/var/log/wind-guild.log
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo touch /var/log/wind-guild.log
+sudo chown ubuntu:ubuntu /var/log/wind-guild.log
+
+sudo systemctl daemon-reload
+sudo systemctl enable wind-guild
+sudo systemctl start wind-guild
+sudo systemctl status wind-guild    # active (running) 확인
+tail -f /var/log/wind-guild.log     # Ctrl+C 로 나가기
+```
+
+이제 `curl http://localhost:8080/api/targets` 로 로컬 확인 가능.
+
+#### C-7. Nginx 리버스 프록시 (도메인 없이 IP만 쓸 때)
+
+```bash
+sudo tee /etc/nginx/sites-available/wind-guild > /dev/null <<'EOF'
+server {
+    listen 80 default_server;
+    server_name _;
+
+    client_max_body_size 20m;
+
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
+EOF
+
+sudo ln -sf /etc/nginx/sites-available/wind-guild /etc/nginx/sites-enabled/
+sudo rm -f /etc/nginx/sites-enabled/default
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+이제 브라우저에서 `http://VM공인IP` 접속. ✅
+
+#### C-8. 도메인 + SSL (선택, 하지만 Discord OAuth 쓰려면 사실상 필수)
+
+무료 도메인: https://www.duckdns.org (예: `windguild.duckdns.org`) — 회원가입 후 subdomain 만들고 VM IP 등록.
+
+또는 유료 도메인(가비아·후이즈 등)에서 A 레코드 → VM IP.
+
+도메인 연결 후:
+```bash
+sudo sed -i 's/server_name _;/server_name windguild.duckdns.org;/' /etc/nginx/sites-available/wind-guild
+sudo systemctl reload nginx
+
+sudo certbot --nginx -d windguild.duckdns.org
+# 이메일 입력, 약관 동의, HTTP → HTTPS 리다이렉트 예 선택
+# 자동으로 nginx conf에 SSL 세팅됨, 90일마다 자동 갱신
+```
+
+이제 https://windguild.duckdns.org 접속 가능.
+
+`/etc/wind-guild/env` 의 `SITE_BASE_URL`·`DISCORD_OAUTH_REDIRECT_URI`·`DISCORD_OAUTH_SUCCESS_REDIRECT` 를 https 도메인으로 바꾸고 재시작:
+```bash
+sudo systemctl restart wind-guild
+```
+
+Discord Developer Portal의 Redirects에도 도메인 URL 추가 필수.
+
+#### C-9. 코드 업데이트 절차
+
+로컬에서 push한 뒤 VM에서:
+```bash
+cd /opt/wind-guild
+git pull
+cd frontend && npm ci && npm run build && cp -r dist/* ../backend/src/main/resources/static/
+cd ../backend && mvn -DskipTests package
+sudo systemctl restart wind-guild
+```
+
+한 줄로 하고 싶으면 아래 스크립트를 `deploy.sh` 로 저장 후 `bash deploy.sh` 로 실행.
+
+#### C-10. 로그 확인 · 문제 해결
+
+```bash
+tail -f /var/log/wind-guild.log         # 앱 로그
+sudo journalctl -u wind-guild -f        # systemd 로그
+sudo systemctl status wind-guild        # 상태
+sudo nginx -t                           # nginx conf 검증
+sudo tail -f /var/log/nginx/error.log   # nginx 로그
+```
 
 ### D. GitHub Actions로 CI/CD
 - 원하시면 `.github/workflows/deploy.yml` 추가해서 push 시 자동 배포 가능
