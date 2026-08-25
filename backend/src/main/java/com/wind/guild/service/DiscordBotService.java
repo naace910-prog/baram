@@ -106,7 +106,8 @@ public class DiscordBotService extends ListenerAdapter {
                 Commands.slash("레이드목록", "예정 레이드 목록 · 참가자 상세"),
                 Commands.slash("레이드결과", "최근 완료 레이드 2건 · 참가자·득템·정산"),
                 Commands.slash("닉네임변경", "본인 닉네임 변경 (사이트와 동기화)")
-                        .addOptions(new OptionData(OptionType.STRING, "닉네임", "새 닉네임 (1~40자)", true))
+                        .addOptions(new OptionData(OptionType.STRING, "닉네임", "새 닉네임 (1~40자)", true)),
+                Commands.slash("도움말", "바람클래식-개화 문파 시스템 전 기능 안내")
         ).queue();
     }
 
@@ -132,6 +133,7 @@ public class DiscordBotService extends ListenerAdapter {
                 case "레이드목록" -> handleListRaid(e);
                 case "레이드결과" -> handleRaidResults(e);
                 case "닉네임변경" -> handleChangeNickname(e);
+                case "도움말" -> handleHelp(e);
             }
         } catch (Exception ex) {
             log.warn("Slash command failed: {}", ex.toString());
@@ -269,6 +271,51 @@ public class DiscordBotService extends ListenerAdapter {
         } catch (Exception ex) {
             e.getHook().sendMessage("변경 실패: " + ex.getMessage()).setEphemeral(true).queue();
         }
+    }
+
+    private void handleHelp(SlashCommandInteractionEvent e) {
+        String base = props.getSiteBaseUrl();
+        String site = (base == null || base.isBlank()) ? "" : base;
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("🌸 **바람클래식-개화 문파 시스템 안내 ").append(com.wind.guild.config.AppVersion.VERSION).append("**\n");
+        if (!site.isEmpty()) sb.append("🔗 사이트: ").append(site).append("\n");
+
+        sb.append("\n**🎮 Discord 슬래시 커맨드**\n");
+        sb.append("• `/레이드등록 대상:<이름> 시간:<HH:mm or MM/dd HH:mm> [메모]` — 문주/부문주만\n");
+        sb.append("  · 대상 예시: 해골왕 · 흑룡 · 감룡 · 묵룡 · 진룡\n");
+        sb.append("  · 키워드도 가능: `해골왕` · `어금니` · `용` · `룡`\n");
+        sb.append("• `/레이드목록` — 예정 레이드 · 시간·참가자 상세\n");
+        sb.append("• `/레이드결과` — 최근 완료 레이드 2건 · 참가자·득템·정산 내역\n");
+        sb.append("• `/닉네임변경 닉네임:<새 닉네임>` — 사이트와 동기화\n");
+        sb.append("• `/도움말` — 이 안내\n");
+
+        sb.append("\n**🌐 사이트 기능** (Discord 로그인 or 계정)\n");
+        sb.append("• **레이드 목록·상세** — 투표(참가/불참/미정) · 실시간 참가자 명단\n");
+        sb.append("• **레이드 등록** (문주/부문주) — 대상·시간·메모 · 1분 단위 시간\n");
+        sb.append("• **파티 편성** — 드래그앤드롭 · YES 자동배치 · **🤖 직전 파티 승계** (같은 대상 최근 편성 그대로, 현재 참가자만)\n");
+        sb.append("• **득템·판매금·분배** — 드랍 대량입력 (수량+1개당가) → 각 득템 `분배` (계산) → `지급` 스위치 (실제 이체 표시)\n");
+        sb.append("• **채팅** — 실시간 · 사이트 ↔ Discord 자동 릴레이 · ⭐ 중요 문주 강조\n");
+        sb.append("• **문파원 관리** (문주/부문주) — 역할·별표·비번초기화·활성/비활성\n");
+        sb.append("• **통계** — 참가율·득템·분배 집계\n");
+        sb.append("• **설정** — 푸시 알림 · 닉네임 · (문주) 데이터 초기화\n");
+
+        sb.append("\n**🔔 자동 알림**\n");
+        sb.append("• 서버 기동 완료 · 재배포마다 변경사항 함께 전송\n");
+        sb.append("• 레이드 30분 전 리마인더 (Discord + 웹 푸시)\n");
+        sb.append("• 레이드 자동 완료 (예정 시각 30분 초과 시)\n");
+        sb.append("• 분배금 지급 시 대상자에게 push + 채팅\n");
+
+        sb.append("\n**👑 권한**\n");
+        sb.append("• 문주(MASTER) · 부문주(VICE) · 일반(MEMBER)\n");
+        sb.append("• 문주 중 **⭐ 중요별표** 는 채팅/디스코드에서 별도 강조 (문주만 지정 가능)\n");
+        sb.append("• 레이드 등록 · 파티 편성 · 문파원 관리 · 분배/지급 = 문주/부문주\n");
+
+        sb.append("\n**📱 모바일 · PWA**\n");
+        sb.append("• 브라우저 메뉴 → **홈 화면에 추가** → 앱처럼 실행\n");
+        sb.append("• iOS 는 홈화면 추가 후 Safari 16.4+ 에서 웹 푸시 가능\n");
+
+        e.getHook().sendMessage(sb.toString()).setEphemeral(true).queue();
     }
 
     private boolean isMasterByDiscord(String discordUserId) {
