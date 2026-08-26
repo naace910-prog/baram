@@ -16,11 +16,15 @@ import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
+import net.dv8tion.jda.api.events.interaction.ModalInteractionEvent;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.dv8tion.jda.api.interactions.commands.OptionType;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
 import net.dv8tion.jda.api.interactions.commands.build.OptionData;
+import net.dv8tion.jda.api.interactions.components.text.TextInput;
+import net.dv8tion.jda.api.interactions.components.text.TextInputStyle;
+import net.dv8tion.jda.api.interactions.modals.Modal;
 import net.dv8tion.jda.api.requests.GatewayIntent;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
@@ -47,6 +51,7 @@ public class DiscordBotService extends ListenerAdapter {
     private final RaidService raidService;
     private final ObjectProvider<DiscordNotifier> notifierProvider;
     private final ObjectProvider<ChatService> chatServiceProvider;
+    private final ObjectProvider<LootService> lootServiceProvider;
 
     private JDA jda;
 
@@ -431,21 +436,122 @@ public class DiscordBotService extends ListenerAdapter {
     @Override
     public void onButtonInteraction(ButtonInteractionEvent e) {
         String id = e.getComponentId();
-        if (!id.startsWith("raid:vote:")) return;
+        if (id.startsWith("raid:vote:")) {
+            e.deferReply(true).queue();
+            String[] parts = id.split(":");
+            try {
+                Long raidId = Long.parseLong(parts[2]);
+                VoteType vote = VoteType.valueOf(parts[3]);
+                String discordUserId = e.getUser().getId();
+                raidService.voteByDiscordUser(raidId, discordUserId, vote);
+                e.getHook().sendMessage("투표 반영됨: " + vote).setEphemeral(true).queue();
+                DiscordNotifier n = notifier(); if (n != null) n.updateEmbed(raidId);
+            } catch (IllegalStateException ex) {
+                e.getHook().sendMessage("⚠ " + ex.getMessage()).setEphemeral(true).queue();
+            } catch (Exception ex) {
+                log.warn("Button interaction failed: {}", ex.toString());
+                e.getHook().sendMessage("에러: " + ex.getMessage()).setEphemeral(true).queue();
+            }
+            return;
+        }
+        if (id.startsWith("loot:add:")) {
+            // 문주/부문주만 허용
+            if (!isMasterByDiscord(e.getUser().getId())) {
+                e.reply("문주/부문주만 등록 가능합니다. Discord 계정이 문파원에 연결돼 있는지 확인.").setEphemeral(true).queue();
+                return;
+            }
+            String[] parts = id.split(":");
+            Long raidId, targetId;
+            try {
+                raidId = Long.parseLong(parts[2]);
+                targetId = Long.parseLong(parts[3]);
+            } catch (Exception ex) {
+                e.reply("잘못된 버튼 ID").setEphemeral(true).queue();
+                return;
+            }
+            RaidTarget t = targetRepository.findById(targetId).orElse(null);
+            if (t == null) {
+                e.reply("대상을 찾을 수 없습니다").setEphemeral(true).queue();
+                return;
+            }
+            TextInput qty = TextInput.create("qty", "수량 (개)", TextInputStyle.SHORT)
+                    .setPlaceholder("예: 2")
+                    .setRequired(true)
+                    .setMinLength(1).setMaxLength(3)
+                    .setValue("1")
+                    .build();
+            TextInput price = TextInput.create("price", "1개당 가격 (전, 선택)", TextInputStyle.SHORT)
+                    .setPlaceholder("예: 1000000 · 미정이면 공란")
+                    .setRequired(false)
+                    .setMaxLength(15)
+                    .build();
+            Modal modal = Modal.create("loot:modal:" + raidId + ":" + targetId,
+                            (t.getIcon() != null ? t.getIcon() + " " : "") + t.getName() + " 드랍 등록")
+                    .addComponents(
+                            net.dv8tion.jda.api.interactions.components.ActionRow.of(qty),
+                            net.dv8tion.jda.api.interactions.components.ActionRow.of(price))
+                    .build();
+            e.replyModal(modal).queue();
+        }
+    }
+
+    @Override
+    public void onModalInteraction(ModalInteractionEvent e) {
+        String id = e.getModalId();
+        if (!id.startsWith("loot:modal:")) return;
         e.deferReply(true).queue();
-        String[] parts = id.split(":");
         try {
+            if (!isMasterByDiscord(e.getUser().getId())) {
+                e.getHook().sendMessage("문주/부문주만 등록 가능합니다").setEphemeral(true).queue();
+                return;
+            }
+            String[] parts = id.split(":");
             Long raidId = Long.parseLong(parts[2]);
-            VoteType vote = VoteType.valueOf(parts[3]);
-            String discordUserId = e.getUser().getId();
-            raidService.voteByDiscordUser(raidId, discordUserId, vote);
-            e.getHook().sendMessage("투표 반영됨: " + vote).setEphemeral(true).queue();
-            DiscordNotifier n = notifier(); if (n != null) n.updateEmbed(raidId);
-        } catch (IllegalStateException ex) {
-            e.getHook().sendMessage("⚠ " + ex.getMessage()).setEphemeral(true).queue();
+            Long targetId = Long.parseLong(parts[3]);
+            String qtyStr = e.getValue("qty") != null ? e.getValue("qty").getAsString().trim() : "";
+            String priceStr = e.getValue("price") != null ? e.getValue("price").getAsString().trim() : "";
+            int quantity;
+            try {
+                quantity = Integer.parseInt(qtyStr);
+                if (quantity < 1) throw new NumberFormatException();
+            } catch (Exception ex) {
+                e.getHook().sendMessage("수량은 1 이상 정수여야 합니다").setEphemeral(true).queue();
+                return;
+            }
+            Long unitPrice = null;
+            if (!priceStr.isEmpty()) {
+                try {
+                    unitPrice = Long.parseLong(priceStr.replace(",", ""));
+                    if (unitPrice < 0) unitPrice = null;
+                } catch (Exception ex) {
+                    e.getHook().sendMessage("가격은 숫자여야 합니다 (미정이면 비워두세요)").setEphemeral(true).queue();
+                    return;
+                }
+            }
+            LootService ls = lootServiceProvider.getIfAvailable();
+            if (ls == null) {
+                e.getHook().sendMessage("서버 초기화 중 — 잠시 후 재시도").setEphemeral(true).queue();
+                return;
+            }
+            var entry = new com.wind.guild.web.dto.LootDto.BulkDropEntry(targetId, quantity, unitPrice);
+            ls.bulkAdd(raidId, new com.wind.guild.web.dto.LootDto.BulkAddRequest(java.util.List.of(entry)));
+            DiscordNotifier n = notifier();
+            if (n != null) n.syncRaidCardFresh(raidId, DiscordNotifier.RaidTrigger.LOOT);
+            ChatService cs = chatService();
+            if (cs != null) {
+                RaidTarget t = targetRepository.findById(targetId).orElse(null);
+                String tname = t != null ? ((t.getIcon() != null ? t.getIcon() + " " : "") + t.getName()) : "#" + targetId;
+                String msg = "💰 [Discord] " + tname + " " + quantity + "개"
+                        + (unitPrice != null ? " · " + String.format("%,d", unitPrice * quantity) + "전" : "");
+                cs.saveSystem(msg);
+            }
+            e.getHook().sendMessage("✅ 등록 완료 · " + quantity + "개"
+                    + (unitPrice != null ? " · 1개당 " + String.format("%,d", unitPrice) + "전" : "")).setEphemeral(true).queue();
         } catch (Exception ex) {
-            log.warn("Button interaction failed: {}", ex.toString());
-            e.getHook().sendMessage("에러: " + ex.getMessage()).setEphemeral(true).queue();
+            log.warn("Modal loot submit failed: {}", ex.toString());
+            try {
+                e.getHook().sendMessage("에러: " + ex.getMessage()).setEphemeral(true).queue();
+            } catch (Exception ignore) {}
         }
     }
 

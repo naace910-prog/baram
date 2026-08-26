@@ -42,6 +42,7 @@ public class DiscordNotifier {
     private final RaidPartyRepository partyRepository;
     private final RaidPartyMemberRepository partyMemberRepository;
     private final MemberRepository memberRepository;
+    private final RaidTargetRepository targetRepository;
     private final RestTemplate rest = new RestTemplate();
 
     private DiscordBotService bot() { return botProvider.getIfAvailable(); }
@@ -63,19 +64,20 @@ public class DiscordNotifier {
                 TextChannel ch = bot.notifyChannel();
                 if (ch == null) return;
                 MessageEmbed embed = buildRaidEmbed(r, trigger);
-                ActionRow buttons = buildRaidButtons(r);
+                var buttons = buildRaidButtons(r);
+                var buttonsArr = buttons.toArray(new net.dv8tion.jda.api.interactions.components.LayoutComponent[0]);
 
                 if (r.getDiscordMessageId() == null) {
-                    ch.sendMessageEmbeds(embed).setComponents(buttons).queue(msg -> {
+                    ch.sendMessageEmbeds(embed).setComponents(buttonsArr).queue(msg -> {
                         r.setDiscordMessageId(msg.getIdLong());
                         raidRepository.save(r);
                     }, err -> log.warn("raid card send failed: {}", err.toString()));
                 } else {
                     ch.editMessageEmbedsById(r.getDiscordMessageId(), embed)
-                            .setComponents(buttons)
+                            .setComponents(buttonsArr)
                             .queue(null, err -> {
                                 log.warn("raid card edit failed (fallback to new send): {}", err.toString());
-                                ch.sendMessageEmbeds(embed).setComponents(buttons).queue(m -> {
+                                ch.sendMessageEmbeds(embed).setComponents(buttonsArr).queue(m -> {
                                     r.setDiscordMessageId(m.getIdLong());
                                     raidRepository.save(r);
                                 });
@@ -111,8 +113,9 @@ public class DiscordNotifier {
             TextChannel ch = bot.notifyChannel();
             if (ch == null) return;
             MessageEmbed embed = buildRaidEmbed(r, trigger);
-            ActionRow buttons = buildRaidButtons(r);
-            ch.sendMessageEmbeds(embed).setComponents(buttons).queue(msg -> {
+            var buttons = buildRaidButtons(r);
+            var buttonsArr = buttons.toArray(new net.dv8tion.jda.api.interactions.components.LayoutComponent[0]);
+            ch.sendMessageEmbeds(embed).setComponents(buttonsArr).queue(msg -> {
                 r.setDiscordMessageId(msg.getIdLong());
                 raidRepository.save(r);
             }, err -> log.warn("raid card fresh send failed: {}", err.toString()));
@@ -310,13 +313,33 @@ public class DiscordNotifier {
         eb.addField("💰 득템", truncate(sb.toString(), 1000), false);
     }
 
-    private ActionRow buildRaidButtons(Raid r) {
+    private List<ActionRow> buildRaidButtons(Raid r) {
         String siteLink = props.getSiteBaseUrl() + "/raids/" + r.getId();
-        return ActionRow.of(
+        if (r.getStatus() == RaidStatus.DONE) {
+            // 완료 상태: 투표 대신 대상별 [드랍 등록] 버튼 (버튼 1클릭 → 모달)
+            List<RaidTarget> targets;
+            if (r.getTarget() != null) {
+                targets = List.of(r.getTarget());
+            } else if (r.getCategory() != null) {
+                targets = targetRepository.findByCategoryOrderByIdAsc(r.getCategory());
+            } else {
+                targets = List.of();
+            }
+            List<Button> row1 = new ArrayList<>();
+            row1.add(Button.link(siteLink, "상세보기"));
+            for (RaidTarget t : targets) {
+                if (row1.size() >= 5) break; // Discord row 최대 5개
+                String label = (t.getIcon() != null && !t.getIcon().isBlank() ? t.getIcon() + " " : "🎯 ")
+                        + t.getName() + " 드랍";
+                row1.add(Button.primary("loot:add:" + r.getId() + ":" + t.getId(), label));
+            }
+            return List.of(ActionRow.of(row1));
+        }
+        return List.of(ActionRow.of(
                 Button.success("raid:vote:" + r.getId() + ":YES", "참가"),
                 Button.danger("raid:vote:" + r.getId() + ":NO", "불참"),
                 Button.secondary("raid:vote:" + r.getId() + ":MAYBE", "미정"),
-                Button.link(siteLink, "상세보기"));
+                Button.link(siteLink, "상세보기")));
     }
 
     // ============================================================
@@ -480,8 +503,9 @@ public class DiscordNotifier {
                     + " · " + r.getScheduledAt().format(FMT)
                     + " (" + minsLeft + "분 뒤) · 준비 요망";
             MessageEmbed embed = buildRaidEmbed(r, RaidTrigger.PRE30);
-            ActionRow buttons = buildRaidButtons(r);
-            ch.sendMessage(content).setEmbeds(embed).setComponents(buttons)
+            var buttons = buildRaidButtons(r);
+            var buttonsArr = buttons.toArray(new net.dv8tion.jda.api.interactions.components.LayoutComponent[0]);
+            ch.sendMessage(content).setEmbeds(embed).setComponents(buttonsArr)
                     .queue(msg -> {
                         // 새 카드로 discordMessageId 갱신 → 이후 minor 편집은 새 카드에 반영
                         r.setDiscordMessageId(msg.getIdLong());
