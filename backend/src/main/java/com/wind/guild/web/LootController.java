@@ -4,6 +4,7 @@ import com.wind.guild.config.SessionKeys;
 import com.wind.guild.repository.LootShareRepository;
 import com.wind.guild.repository.MemberRepository;
 import com.wind.guild.repository.RaidLootRepository;
+import com.wind.guild.repository.RaidTargetRepository;
 import com.wind.guild.service.ChatService;
 import com.wind.guild.service.DiscordNotifier;
 import com.wind.guild.service.LootService;
@@ -29,6 +30,7 @@ public class LootController {
     private final LootShareRepository shareRepo;
     private final RaidLootRepository lootRepo;
     private final MemberRepository memberRepo;
+    private final RaidTargetRepository targetRepo;
     private final ChatService chat;
     private static final DecimalFormat MONEY = new DecimalFormat("#,###");
 
@@ -41,6 +43,12 @@ public class LootController {
     public List<LootDto.LootView> create(@PathVariable Long raidId,
                                          @Valid @RequestBody LootDto.UpsertLootRequest req) {
         lootService.upsert(raidId, null, req);
+        discord.syncRaidCardFresh(raidId, DiscordNotifier.RaidTrigger.LOOT);
+        try {
+            chat.saveSystem("💰 득템 등록 · " + req.itemName()
+                    + (req.dropped() ? "" : " (노드랍)")
+                    + (req.soldPrice() != null && req.soldPrice() > 0 ? " · " + MONEY.format(req.soldPrice()) + "전" : ""));
+        } catch (Exception ignored) {}
         return lootService.listByRaid(raidId);
     }
 
@@ -48,6 +56,25 @@ public class LootController {
     public List<LootDto.LootView> bulkAdd(@PathVariable Long raidId,
                                           @Valid @RequestBody LootDto.BulkAddRequest req) {
         lootService.bulkAdd(raidId, req);
+        discord.syncRaidCardFresh(raidId, DiscordNotifier.RaidTrigger.LOOT);
+        try {
+            StringBuilder sb = new StringBuilder("💰 드랍 일괄등록 · ");
+            long totalPrice = 0;
+            int totalQty = 0;
+            var parts = new java.util.ArrayList<String>();
+            for (var e : req.drops()) {
+                String tname = targetRepo.findById(e.targetId())
+                        .map(x -> (x.getIcon() != null ? x.getIcon() + " " : "") + x.getName())
+                        .orElse("#" + e.targetId());
+                parts.add(tname + " " + e.quantity() + "개");
+                totalQty += e.quantity();
+                if (e.unitPrice() != null && e.unitPrice() > 0) totalPrice += e.unitPrice() * e.quantity();
+            }
+            sb.append(String.join(", ", parts))
+                    .append(" · 총 ").append(totalQty).append("개");
+            if (totalPrice > 0) sb.append(" · ").append(MONEY.format(totalPrice)).append("전");
+            chat.saveSystem(sb.toString());
+        } catch (Exception ignored) {}
         return lootService.listByRaid(raidId);
     }
 
@@ -55,12 +82,14 @@ public class LootController {
     public List<LootDto.LootView> update(@PathVariable Long raidId, @PathVariable Long lootId,
                                          @Valid @RequestBody LootDto.UpsertLootRequest req) {
         lootService.upsert(raidId, lootId, req);
+        discord.syncRaidCard(raidId, DiscordNotifier.RaidTrigger.LOOT);
         return lootService.listByRaid(raidId);
     }
 
     @DeleteMapping("/{lootId}")
     public ResponseEntity<List<LootDto.LootView>> delete(@PathVariable Long raidId, @PathVariable Long lootId) {
         lootService.delete(lootId);
+        discord.syncRaidCard(raidId, DiscordNotifier.RaidTrigger.LOOT);
         return ResponseEntity.ok(lootService.listByRaid(raidId));
     }
 
@@ -69,7 +98,7 @@ public class LootController {
                                              @Valid @RequestBody LootDto.DistributeRequest req) {
         lootService.distribute(lootId, req.memberIds());
         discord.syncLootCard(lootId, DiscordNotifier.LootTrigger.DISTRIBUTED);
-        discord.syncRaidCard(raidId, DiscordNotifier.RaidTrigger.VOTE);
+        discord.syncRaidCardFresh(raidId, DiscordNotifier.RaidTrigger.LOOT);
         try {
             var loot = lootRepo.findById(lootId).orElse(null);
             if (loot != null && loot.getSoldPrice() != null) {
@@ -104,7 +133,7 @@ public class LootController {
         Long actorId = (Long) session.getAttribute(SessionKeys.MEMBER_ID);
         lootService.markPaid(shareId, req.paid(), actorId);
         discord.syncLootCard(lootId, DiscordNotifier.LootTrigger.PAID_CHANGED);
-        discord.syncRaidCard(raidId, DiscordNotifier.RaidTrigger.VOTE);
+        discord.syncRaidCardFresh(raidId, DiscordNotifier.RaidTrigger.LOOT);
         if (req.paid()) {
             shareRepo.findById(shareId).ifPresent(s -> {
                 push.sendToMember(s.getMemberId(),

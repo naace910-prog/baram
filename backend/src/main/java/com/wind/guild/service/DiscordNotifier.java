@@ -46,7 +46,7 @@ public class DiscordNotifier {
 
     private DiscordBotService bot() { return botProvider.getIfAvailable(); }
 
-    public enum RaidTrigger { CREATED, VOTE, ATTENDEES, PARTY, PRE30, STATUS }
+    public enum RaidTrigger { CREATED, VOTE, ATTENDEES, PARTY, PRE30, STATUS, LOOT }
     public enum LootTrigger { DISTRIBUTED, PAID_CHANGED, PRICE_CHANGED }
 
     // ============================================================
@@ -94,6 +94,33 @@ public class DiscordNotifier {
         }
     }
 
+    /**
+     * 항상 **새 메시지** 로 카드를 발송하고, discordMessageId 를 새 것으로 갱신.
+     * 사용: 레이드 등록·파티편성·득템 입력·분배·지급·리마인더 등 '완료' 성격 이벤트.
+     * 이후 minor 이벤트 (투표 등) 는 syncRaidCard 로 새 카드에 편집.
+     */
+    public void syncRaidCardFresh(Long raidId, RaidTrigger trigger) {
+        try {
+            Raid r = raidRepository.findById(raidId).orElse(null);
+            if (r == null) return;
+            DiscordBotService bot = bot();
+            if (bot == null || !bot.isReady()) {
+                syncRaidCard(raidId, trigger); // fallback (webhook 등)
+                return;
+            }
+            TextChannel ch = bot.notifyChannel();
+            if (ch == null) return;
+            MessageEmbed embed = buildRaidEmbed(r, trigger);
+            ActionRow buttons = buildRaidButtons(r);
+            ch.sendMessageEmbeds(embed).setComponents(buttons).queue(msg -> {
+                r.setDiscordMessageId(msg.getIdLong());
+                raidRepository.save(r);
+            }, err -> log.warn("raid card fresh send failed: {}", err.toString()));
+        } catch (Exception e) {
+            log.warn("syncRaidCardFresh error: {}", e.toString());
+        }
+    }
+
     private MessageEmbed buildRaidEmbed(Raid r, RaidTrigger trigger) {
         String title;
         Color color;
@@ -106,6 +133,7 @@ public class DiscordNotifier {
                     case CREATED -> { title = "🆕 새 레이드"; color = new Color(0x00B0FF); }
                     case ATTENDEES -> { title = "🎯 참가자 확정"; color = new Color(0x7C3AED); }
                     case PARTY -> { title = "🛡️ 파티 편성"; color = new Color(0x7C3AED); }
+                    case LOOT -> { title = "💰 득템 등록"; color = new Color(0xFAAD14); }
                     case VOTE -> { title = "📢 레이드 안내"; color = new Color(0x00B0FF); }
                     default -> { title = "📢 레이드 안내"; color = new Color(0x00B0FF); }
                 }
@@ -454,7 +482,11 @@ public class DiscordNotifier {
             MessageEmbed embed = buildRaidEmbed(r, RaidTrigger.PRE30);
             ActionRow buttons = buildRaidButtons(r);
             ch.sendMessage(content).setEmbeds(embed).setComponents(buttons)
-                    .queue(null, err -> log.debug("pre30 fresh send failed: {}", err.toString()));
+                    .queue(msg -> {
+                        // 새 카드로 discordMessageId 갱신 → 이후 minor 편집은 새 카드에 반영
+                        r.setDiscordMessageId(msg.getIdLong());
+                        raidRepository.save(r);
+                    }, err -> log.debug("pre30 fresh send failed: {}", err.toString()));
         } catch (Exception e) {
             log.debug("postRaidPre30Fresh error: {}", e.toString());
         }
