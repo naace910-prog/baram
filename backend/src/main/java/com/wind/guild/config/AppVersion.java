@@ -3,7 +3,7 @@ package com.wind.guild.config;
 public final class AppVersion {
     private AppVersion() {}
 
-    public static final String VERSION = "v1.0.31";
+    public static final String VERSION = "v1.0.32";
 
     public static final String CHANGELOG =
             "• **분배자 표기** — 누가 언제 분배했는지 카드/사이트에 표시 (raid_loots.distributed_by/at 컬럼)\n" +
@@ -22,5 +22,7 @@ public final class AppVersion {
             "  · LootShareRepository.findByLootIdIn / RaidPartyMemberRepository.findByPartyIdIn 배치\n" +
             "• Discord/WebPush 발송 = @Async('discordExecutor') 백그라운드 스레드\n" +
             "  · 백엔드 API 응답이 외부 I/O 를 안 기다림 (레이드 저장/투표/지급 클릭 즉시 응답)\n" +
-            "  · ThreadPoolTaskExecutor (core 2, max 4, queue 100)";
+            "  · ThreadPoolTaskExecutor (core 2, max 4, queue 100)\n" +
+            "• Discord 로그인 **매번 승인 화면 뜨는 것 해결** — `prompt=none` 으로 이미 승인한 앱이면 즉시 자동 로그인 (최초 1회만 승인 필요)\n" +
+            "  · 최초 사용자 or 승인 만료 시 (consent_required 에러) 자동으로 승인 화면 fallback";
 }

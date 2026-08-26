@@ -42,11 +42,15 @@ public class DiscordOAuthService {
 
     public String buildAuthorizeUrl() {
         if (!isConfigured()) throw new IllegalStateException("Discord OAuth이 설정되지 않았습니다");
+        // prompt=none: 이미 승인한 앱이면 승인 화면 스킵 → Discord 로그인 상태만 있으면 자동 리다이렉트
+        //  · 최초 1회는 승인 화면 뜸 (그건 필수 · 사용자가 동의해야 함)
+        //  · 2회차부터 자동
         return "https://discord.com/api/oauth2/authorize"
                 + "?client_id=" + props.getClientId()
                 + "&redirect_uri=" + URLEncoder.encode(props.getOauthRedirectUri(), StandardCharsets.UTF_8)
                 + "&response_type=code"
-                + "&scope=" + URLEncoder.encode("identify guilds", StandardCharsets.UTF_8);
+                + "&scope=" + URLEncoder.encode("identify guilds", StandardCharsets.UTF_8)
+                + "&prompt=none";
     }
 
     @Transactional

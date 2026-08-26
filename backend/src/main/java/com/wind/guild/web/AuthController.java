@@ -89,6 +89,13 @@ public class AuthController {
             HttpServletResponse resp) throws java.io.IOException {
         String base = discordProps.getOauthLoginSuccessRedirect();
         if (error != null || code == null) {
+            // prompt=none 인데 최초 사용자 or Discord 세션 만료 → 승인 화면으로 재시도
+            if ("consent_required".equals(error) || "interaction_required".equals(error) || "login_required".equals(error)) {
+                // prompt 없이 재시도 (기본 = consent)
+                String fallback = discordOAuth.buildAuthorizeUrl().replace("&prompt=none", "");
+                resp.sendRedirect(fallback);
+                return;
+            }
             resp.sendRedirect(base + "login?discordError=" + (error == null ? "no_code" : error));
             return;
         }
