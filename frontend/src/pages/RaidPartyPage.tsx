@@ -503,7 +503,6 @@ function PartyCard({
     if (!byRole.has(e.role)) byRole.set(e.role, [])
     byRole.get(e.role)!.push(e)
   }
-  const total = entries.length
 
   return (
     <Card
@@ -541,9 +540,6 @@ function PartyCard({
             onAddFree={() => onAddFree(r.name)}
           />
         ))}
-      </div>
-      <div style={{ marginTop: 8, textAlign: 'right', color: '#8c8c8c', fontSize: 12 }}>
-        총원 {total}명
       </div>
     </Card>
   )

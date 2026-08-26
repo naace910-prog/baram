@@ -206,7 +206,10 @@ public class DiscordNotifier {
                 body.append("• ").append(e.getKey()).append(" (").append(e.getValue().size()).append("): ")
                         .append(String.join(", ", e.getValue())).append("\n");
             }
-            body.append("총원 ").append(ms.size()).append("명");
+            // '총원 N명' 제거 — 한 사람이 여러 역할 담당 시 슬롯 카운트라 부풀려짐
+            if (body.length() > 0 && body.charAt(body.length() - 1) == '\n') {
+                body.deleteCharAt(body.length() - 1);
+            }
             eb.addField(head, truncate(body.toString(), 1000), false);
         }
     }
@@ -378,6 +381,7 @@ public class DiscordNotifier {
     public void notifyRaidPre30(Long raidId) { syncRaidCard(raidId, RaidTrigger.PRE30); }
 
     // 30분 전 리마인더는 **새 메시지** 로 (알림 트리거를 위해)
+    // 임베드는 레이드 카드와 동일 (참가/불참/미정 닉네임 · 파티 편성 · 득템 포함)
     public void postRaidPre30Fresh(Long raidId) {
         try {
             DiscordBotService b = bot();
@@ -398,10 +402,13 @@ public class DiscordNotifier {
             } else {
                 label = "레이드";
             }
-            String msg = "@here ⏰ **곧 시작: " + label + "**"
+            String content = "@here ⏰ **곧 시작: " + label + "**"
                     + " · " + r.getScheduledAt().format(FMT)
                     + " (" + minsLeft + "분 뒤) · 준비 요망";
-            ch.sendMessage(msg).queue(null, err -> log.debug("pre30 fresh send failed: {}", err.toString()));
+            MessageEmbed embed = buildRaidEmbed(r, RaidTrigger.PRE30);
+            ActionRow buttons = buildRaidButtons(r);
+            ch.sendMessage(content).setEmbeds(embed).setComponents(buttons)
+                    .queue(null, err -> log.debug("pre30 fresh send failed: {}", err.toString()));
         } catch (Exception e) {
             log.debug("postRaidPre30Fresh error: {}", e.toString());
         }

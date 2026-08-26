@@ -36,15 +36,12 @@ public class PartyController {
                     .append(raid.getTarget().getIcon() != null ? raid.getTarget().getIcon() + " " : "")
                     .append(raid.getTarget().getName()).append(" · ")
                     .append(raid.getScheduledAt().format(DateTimeFormatter.ofPattern("MM/dd HH:mm")));
-            int total = 0;
             for (var p : parties) {
                 sb.append("\n• ").append(p.channelType() == ChannelType.MAIN ? "본대" : "침략");
                 if (p.channelNumber() != null) sb.append(" 채널 ").append(p.channelNumber());
                 if (p.memo() != null && !p.memo().isBlank()) sb.append(" · ").append(p.memo());
-                sb.append(" (").append(p.members().size()).append("명)");
-                total += p.members().size();
+                // '(N명)' 슬롯 카운트 제거 — 한 사람 여러 역할 시 부풀려짐
             }
-            sb.append("\n총원: ").append(total).append("명");
             chat.saveSystem(sb.toString());
         } catch (Exception ignored) {}
     }
