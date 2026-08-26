@@ -3,7 +3,7 @@ package com.wind.guild.config;
 public final class AppVersion {
     private AppVersion() {}
 
-    public static final String VERSION = "v1.0.29";
+    public static final String VERSION = "v1.0.30";
 
     public static final String CHANGELOG =
             "• **분배자 표기** — 누가 언제 분배했는지 카드/사이트에 표시 (raid_loots.distributed_by/at 컬럼)\n" +
@@ -13,5 +13,6 @@ public final class AppVersion {
             "  · LOOT (득템 등록/판매금): 첫 등록은 new, 이후는 edit\n" +
             "  · DIST (분배): 첫 분배는 new, 이후는 edit\n" +
             "  · 지급(paid) 토글: 항상 edit\n" +
-            "  · syncRaidCardCategoryAware 로 통일";
+            "  · syncRaidCardCategoryAware 로 통일\n" +
+            "• 사이트 주요 모달 (분배 · 득템편집 · 드랍대량입력) Enter 키 → 확인 버튼 자동 클릭";
 }

@@ -449,6 +449,7 @@ function BulkDropModal({ open, onClose, targets, raidId, onSaved }: {
               min={0} max={99}
               value={q}
               onChange={(v) => setQty(prev => ({ ...prev, [t.id]: Number(v) || 0 }))}
+              onPressEnter={save}
               style={{ width: 78 }}
               addonAfter="개"
               size="small"
@@ -457,6 +458,7 @@ function BulkDropModal({ open, onClose, targets, raidId, onSaved }: {
               min={0}
               value={p}
               onChange={(v) => setPrice(prev => ({ ...prev, [t.id]: Number(v) || 0 }))}
+              onPressEnter={save}
               style={{ width: 140 }}
               addonAfter="전/개"
               step={100000}
@@ -520,7 +522,7 @@ function LootEditModal({
       <div style={{ display: 'grid', gap: 12 }}>
         <div>
           <div style={{ marginBottom: 4 }}>아이템명</div>
-          <Input value={itemName} onChange={(e) => setItemName(e.target.value)} />
+          <Input value={itemName} onChange={(e) => setItemName(e.target.value)} onPressEnter={save} />
         </div>
         <div>
           <div style={{ marginBottom: 4 }}>드랍여부</div>
@@ -531,6 +533,7 @@ function LootEditModal({
           <InputNumber
             value={soldPrice ?? undefined}
             onChange={(v) => setSoldPrice(v == null ? null : Number(v))}
+            onPressEnter={save}
             style={{ width: '100%' }} min={0} step={100000}
             formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
           />
@@ -577,6 +580,7 @@ function DistributeModal({
           min={Math.max(1, picked.length)}
           max={99}
           onChange={(v) => setDivisor(v == null ? picked.length : Number(v))}
+          onPressEnter={save}
           style={{ width: 70 }}
           addonAfter="명"
         />
