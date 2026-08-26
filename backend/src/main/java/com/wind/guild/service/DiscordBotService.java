@@ -58,9 +58,6 @@ public class DiscordBotService extends ListenerAdapter {
     private final ObjectProvider<ChatService> chatServiceProvider;
     private final ObjectProvider<LootService> lootServiceProvider;
 
-    // 분배 대상 선택 상태 (in-memory · lootId → 선택된 memberId 집합)
-    private final java.util.Map<Long, java.util.LinkedHashSet<Long>> distributeSelection = new java.util.concurrent.ConcurrentHashMap<>();
-
     private JDA jda;
 
     private DiscordNotifier notifier() { return notifierProvider.getIfAvailable(); }
@@ -513,14 +510,16 @@ public class DiscordBotService extends ListenerAdapter {
             var lootOpt = lootRepository.findById(lootId);
             if (lootOpt.isEmpty()) { e.reply("득템 없음").setEphemeral(true).queue(); return; }
             var loot = lootOpt.get();
-            TextInput price = TextInput.create("price", "판매금액 (전)", TextInputStyle.SHORT)
+            TextInput.Builder priceB = TextInput.create("price", "판매금액 (전)", TextInputStyle.SHORT)
                     .setPlaceholder("예: 5000000")
-                    .setRequired(true).setMaxLength(15)
-                    .setValue(loot.getSoldPrice() != null ? String.valueOf(loot.getSoldPrice()) : "")
-                    .build();
+                    .setRequired(true).setMaxLength(15);
+            // setValue 는 빈 문자열이면 JDA 가 throw. null/0 인 경우 setValue 스킵.
+            if (loot.getSoldPrice() != null && loot.getSoldPrice() > 0) {
+                priceB.setValue(String.valueOf(loot.getSoldPrice()));
+            }
             Modal modal = Modal.create("loot:pricemodal:" + lootId,
                             "💵 " + loot.getItemName() + " 판매금 입력")
-                    .addComponents(net.dv8tion.jda.api.interactions.components.ActionRow.of(price))
+                    .addComponents(net.dv8tion.jda.api.interactions.components.ActionRow.of(priceB.build()))
                     .build();
             e.replyModal(modal).queue();
             return;
@@ -540,130 +539,127 @@ public class DiscordBotService extends ListenerAdapter {
                 e.reply("판매금액이 없어 분배할 수 없습니다. 먼저 판매금 입력하세요.").setEphemeral(true).queue();
                 return;
             }
-            replyDistributeButtons(e, loot);
+            // 분배 = divisor 숫자 입력 모달
+            int autoDivisor = countYesVotersUnique(loot.getRaidId());
+            TextInput.Builder divB = TextInput.create("divisor", "분배 인원수 (÷ N명)", TextInputStyle.SHORT)
+                    .setPlaceholder("YES 투표자 " + autoDivisor + "명 · 미등록 포함 시 늘리세요")
+                    .setRequired(true).setMinLength(1).setMaxLength(3);
+            if (autoDivisor > 0) divB.setValue(String.valueOf(autoDivisor));
+            Modal modal = Modal.create("loot:distmodal:" + lootId,
+                            "⚖️ " + loot.getItemName() + " · " + String.format("%,d", loot.getSoldPrice()) + "전 분배")
+                    .addComponents(net.dv8tion.jda.api.interactions.components.ActionRow.of(divB.build()))
+                    .build();
+            e.replyModal(modal).queue();
             return;
         }
-        if (id.startsWith("loot:distbtn:")) {
-            handleDistributeToggle(e, id);
-            return;
-        }
-        if (id.startsWith("loot:distconfirm:")) {
-            handleDistributeConfirm(e, id);
-            return;
-        }
-        if (id.startsWith("loot:distcancel:")) {
+        if (id.startsWith("loot:paid:")) {
+            if (!isMasterByDiscord(e.getUser().getId())) {
+                e.reply("문주/부문주만 지급 관리 가능합니다.").setEphemeral(true).queue();
+                return;
+            }
             long lootId;
-            try { lootId = Long.parseLong(id.substring("loot:distcancel:".length())); }
+            try { lootId = Long.parseLong(id.substring("loot:paid:".length())); }
+            catch (Exception ex) { e.reply("잘못된 버튼 ID").setEphemeral(true).queue(); return; }
+            var loot = lootRepository.findById(lootId).orElse(null);
+            if (loot == null) { e.reply("득템 없음").setEphemeral(true).queue(); return; }
+            replyPaidToggleButtons(e, loot);
+            return;
+        }
+        if (id.startsWith("loot:paidbtn:")) {
+            handlePaidToggle(e, id);
+            return;
+        }
+        if (id.startsWith("loot:paiddone:")) {
+            long lootId;
+            try { lootId = Long.parseLong(id.substring("loot:paiddone:".length())); }
             catch (Exception ex) { return; }
-            distributeSelection.remove(lootId);
-            e.editMessage("취소됨").setComponents().queue();
+            var loot = lootRepository.findById(lootId).orElse(null);
+            DiscordNotifier n = notifier();
+            if (loot != null && n != null) n.syncRaidCard(loot.getRaidId(), DiscordNotifier.RaidTrigger.LOOT);
+            e.editMessage("닫힘").setComponents().queue();
             return;
         }
     }
 
-    private void replyDistributeButtons(ButtonInteractionEvent e, com.wind.guild.domain.RaidLoot loot) {
-        // 초기 선택 = 기존 분배 있으면 그 명단, 없으면 최신 YES 투표자
-        var existing = shareRepository.findByLootId(loot.getId());
-        java.util.LinkedHashSet<Long> initial;
-        if (!existing.isEmpty()) {
-            initial = new java.util.LinkedHashSet<>();
-            for (var s : existing) initial.add(s.getMemberId());
-        } else {
-            initial = yesVoterIds(loot.getRaidId());
+    /** 지급 관리 UI: 각 share 마다 개별 토글 버튼 (즉시 저장). */
+    private void replyPaidToggleButtons(ButtonInteractionEvent e, com.wind.guild.domain.RaidLoot loot) {
+        var shares = shareRepository.findByLootId(loot.getId());
+        if (shares.isEmpty()) {
+            e.reply("아직 분배 안 됨. 먼저 [⚖️ 분배] 로 몫 배정하세요.").setEphemeral(true).queue();
+            return;
         }
-        distributeSelection.put(loot.getId(), initial);
-        List<LayoutComponent> rows = buildDistributeButtonRows(loot);
-        String header = "⚖️ **" + loot.getItemName() + "** · " + String.format("%,d", loot.getSoldPrice()) + "전\n"
-                + "분배할 문파원 클릭 (초록=선택 / 회색=제외)"
-                + (existing.isEmpty() ? "" : "\n⚠️ 이미 분배됨 (재분배 시 기존 정산 기록 초기화)");
+        List<LayoutComponent> rows = buildPaidToggleRows(loot, shares);
+        String header = "💰 **" + loot.getItemName() + "** 지급 관리\n"
+                + "각 문파원 버튼 클릭 = 지급 상태 토글 (초록 = 지급됨 / 회색 = 미지급)";
         e.reply(header)
                 .setEphemeral(true)
                 .setComponents(rows.toArray(new LayoutComponent[0]))
                 .queue();
     }
 
-    private List<LayoutComponent> buildDistributeButtonRows(com.wind.guild.domain.RaidLoot loot) {
-        var selected = distributeSelection.getOrDefault(loot.getId(), new java.util.LinkedHashSet<>());
-        var members = memberRepository.findAllByActiveTrueOrderByNicknameAsc();
-        int MAX_MEMBER_BUTTONS = 20; // 4 rows × 5 = 20 · 마지막 행 = 확정/취소
-        List<Button> btns = new java.util.ArrayList<>();
-        for (var m : members) {
-            if (btns.size() >= MAX_MEMBER_BUTTONS) break;
-            boolean picked = selected.contains(m.getId());
-            String label = (picked ? "✅ " : "☐ ") + m.getNickname();
+    private List<LayoutComponent> buildPaidToggleRows(com.wind.guild.domain.RaidLoot loot, java.util.List<com.wind.guild.domain.LootShare> shares) {
+        // nickname 조회
+        java.util.Set<Long> ids = new java.util.HashSet<>();
+        for (var s : shares) ids.add(s.getMemberId());
+        java.util.Map<Long, String> nickMap = new java.util.HashMap<>();
+        for (var m : memberRepository.findAllById(ids)) nickMap.put(m.getId(), m.getNickname());
+
+        int MAX = 20; // 4 rows × 5 = 20 · 마지막 행 = 닫기
+        java.util.List<Button> btns = new java.util.ArrayList<>();
+        for (var s : shares) {
+            if (btns.size() >= MAX) break;
+            String nick = nickMap.getOrDefault(s.getMemberId(), "#" + s.getMemberId());
+            String label = (s.isPaid() ? "✅ " : "☐ ") + nick;
             if (label.length() > 25) label = label.substring(0, 25);
-            String cid = "loot:distbtn:" + loot.getId() + ":" + m.getId();
-            btns.add(picked
-                    ? Button.success(cid, label)
-                    : Button.secondary(cid, label));
+            String cid = "loot:paidbtn:" + s.getId();
+            btns.add(s.isPaid() ? Button.success(cid, label) : Button.secondary(cid, label));
         }
-        List<LayoutComponent> rows = new java.util.ArrayList<>();
+        java.util.List<LayoutComponent> rows = new java.util.ArrayList<>();
         for (int i = 0; i < btns.size(); i += 5) {
             rows.add(net.dv8tion.jda.api.interactions.components.ActionRow.of(
                     btns.subList(i, Math.min(i + 5, btns.size()))));
         }
-        // 마지막 확정/취소 행
+        long paid = shares.stream().filter(com.wind.guild.domain.LootShare::isPaid).count();
         rows.add(net.dv8tion.jda.api.interactions.components.ActionRow.of(
-                Button.primary("loot:distconfirm:" + loot.getId(),
-                        "⚖️ " + selected.size() + "명 분배 확인"),
-                Button.danger("loot:distcancel:" + loot.getId(), "취소")
-        ));
+                Button.primary("loot:paiddone:" + loot.getId(), "닫기 (" + paid + "/" + shares.size() + " 지급됨)")));
         return rows;
     }
 
-    private void handleDistributeToggle(ButtonInteractionEvent e, String id) {
-        String[] parts = id.split(":");
-        Long lootId, memberId;
-        try {
-            lootId = Long.parseLong(parts[2]);
-            memberId = Long.parseLong(parts[3]);
-        } catch (Exception ex) { return; }
-        var loot = lootRepository.findById(lootId).orElse(null);
-        if (loot == null) return;
-        var set = distributeSelection.computeIfAbsent(lootId, k -> new java.util.LinkedHashSet<>());
-        if (!set.remove(memberId)) set.add(memberId);
-        List<LayoutComponent> rows = buildDistributeButtonRows(loot);
-        e.editComponents(rows.toArray(new LayoutComponent[0])).queue();
-    }
-
-    private void handleDistributeConfirm(ButtonInteractionEvent e, String id) {
-        long lootId;
-        try { lootId = Long.parseLong(id.substring("loot:distconfirm:".length())); }
+    private void handlePaidToggle(ButtonInteractionEvent e, String id) {
+        long shareId;
+        try { shareId = Long.parseLong(id.substring("loot:paidbtn:".length())); }
         catch (Exception ex) { return; }
-        e.deferEdit().queue();
         try {
             if (!isMasterByDiscord(e.getUser().getId())) {
-                e.getHook().editOriginal("문주/부문주만 분배 가능합니다").setComponents().queue();
-                return;
-            }
-            var loot = lootRepository.findById(lootId).orElse(null);
-            if (loot == null) {
-                e.getHook().editOriginal("득템 없음").setComponents().queue();
-                return;
-            }
-            var selected = distributeSelection.getOrDefault(lootId, new java.util.LinkedHashSet<>());
-            if (selected.isEmpty()) {
-                e.getHook().editOriginal("최소 1명 이상 선택하세요").queue();
+                e.reply("문주/부문주만 지급 처리 가능합니다").setEphemeral(true).queue();
                 return;
             }
             LootService ls = lootServiceProvider.getIfAvailable();
-            if (ls == null) {
-                e.getHook().editOriginal("서버 초기화 중").setComponents().queue();
-                return;
+            var shareOpt = shareRepository.findById(shareId);
+            if (ls == null || shareOpt.isEmpty()) { e.reply("데이터 없음").setEphemeral(true).queue(); return; }
+            var share = shareOpt.get();
+            var member = memberRepository.findByDiscordUserId(e.getUser().getId()).orElse(null);
+            Long actorId = member != null ? member.getId() : null;
+            // 토글: 현재 paid 반대로
+            ls.markPaid(shareId, !share.isPaid(), actorId);
+            // 다시 조회 (업데이트 반영)
+            var reloaded = shareRepository.findById(shareId).orElseThrow();
+            var loot = lootRepository.findById(reloaded.getLootId()).orElseThrow();
+            var shares = shareRepository.findByLootId(loot.getId());
+            // ephemeral 편집 (즉시 UI 반영)
+            List<LayoutComponent> rows = buildPaidToggleRows(loot, shares);
+            e.editComponents(rows.toArray(new LayoutComponent[0])).queue();
+            // 채팅에 개별 지급 알림 (지급 시만)
+            if (reloaded.isPaid()) {
+                ChatService cs = chatService();
+                if (cs != null) {
+                    String nick = memberRepository.findById(reloaded.getMemberId()).map(m -> m.getNickname()).orElse("?");
+                    cs.saveSystem("💵 [Discord] " + loot.getItemName() + " · " + nick + " · " + String.format("%,d", reloaded.getShare()) + "전 지급 완료");
+                }
             }
-            ls.distribute(lootId, new java.util.ArrayList<>(selected), selected.size());
-            distributeSelection.remove(lootId);
-            DiscordNotifier n = notifier();
-            if (n != null) n.syncRaidCard(loot.getRaidId(), DiscordNotifier.RaidTrigger.LOOT);
-            ChatService cs = chatService();
-            long per = loot.getSoldPrice() / selected.size();
-            if (cs != null) cs.saveSystem("⚖️ [Discord] " + loot.getItemName() + " " + String.format("%,d", loot.getSoldPrice())
-                    + "전 · " + selected.size() + "명 · 1인 " + String.format("%,d", per) + "전");
-            e.getHook().editOriginal("✅ 분배 완료 · " + selected.size() + "명 · 1인 " + String.format("%,d", per) + "전")
-                    .setComponents().queue();
         } catch (Exception ex) {
-            log.warn("distribute confirm failed: {}", ex.toString());
-            try { e.getHook().editOriginal("에러: " + ex.getMessage()).setComponents().queue(); } catch (Exception ignore) {}
+            log.warn("paid toggle failed: {}", ex.toString());
+            try { e.reply("에러: " + ex.getMessage()).setEphemeral(true).queue(); } catch (Exception ignore) {}
         }
     }
 
@@ -876,21 +872,7 @@ public class DiscordBotService extends ListenerAdapter {
             if (n != null) n.syncRaidCard(loot.getRaidId(), DiscordNotifier.RaidTrigger.LOOT);
             ChatService cs = chatService();
             if (cs != null) cs.saveSystem("💵 [Discord] " + loot.getItemName() + " 판매금 " + String.format("%,d", price) + "전");
-
-            // 판매금 저장 후 자동으로 분배 대상 선택 UI 이어서 표시
-            var loot2 = lootRepository.findById(lootId).orElse(null);
-            if (loot2 != null) {
-                distributeSelection.put(lootId, yesVoterIds(loot2.getRaidId()));
-                List<LayoutComponent> rows = buildDistributeButtonRows(loot2);
-                String header = "✅ 판매금 " + String.format("%,d", price) + "전 저장\n\n"
-                        + "⚖️ 이어서 **" + loot2.getItemName() + "** 분배할 문파원 클릭 (초록=선택 / 회색=제외)";
-                e.getHook().sendMessage(header)
-                        .setEphemeral(true)
-                        .setComponents(rows.toArray(new LayoutComponent[0]))
-                        .queue();
-            } else {
-                e.getHook().sendMessage("✅ 판매금 " + String.format("%,d", price) + "전 저장").setEphemeral(true).queue();
-            }
+            e.getHook().sendMessage("✅ 판매금 " + String.format("%,d", price) + "전 저장 · 다음 [⚖️ 분배] 버튼으로 진행").setEphemeral(true).queue();
         } catch (Exception ex) {
             log.warn("price modal failed: {}", ex.toString());
             try { e.getHook().sendMessage("에러: " + ex.getMessage()).setEphemeral(true).queue(); } catch (Exception ignore) {}

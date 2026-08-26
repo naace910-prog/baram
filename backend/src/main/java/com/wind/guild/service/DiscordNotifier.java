@@ -349,8 +349,8 @@ public class DiscordNotifier {
                     // 판매금 없음
                     lootBtns.add(Button.primary("loot:price:" + l.getId(), "💵 " + shortName));
                 } else if (hasShares) {
-                    // 이미 분배됨: 재분배 가능 (기존 선택자 pre-selected)
-                    lootBtns.add(Button.secondary("loot:distribute:" + l.getId(), "🔄 " + shortName));
+                    // 이미 분배됨: 지급 관리 UI
+                    lootBtns.add(Button.secondary("loot:paid:" + l.getId(), "💰 " + shortName));
                 } else {
                     // 판매금 있음, 미분배
                     lootBtns.add(Button.success("loot:distribute:" + l.getId(), "⚖️ " + shortName));
