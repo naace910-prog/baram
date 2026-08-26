@@ -316,7 +316,7 @@ public class DiscordNotifier {
     private List<ActionRow> buildRaidButtons(Raid r) {
         String siteLink = props.getSiteBaseUrl() + "/raids/" + r.getId();
         if (r.getStatus() == RaidStatus.DONE) {
-            // 완료 상태: 투표 대신 대상별 [드랍 등록] 버튼 (버튼 1클릭 → 모달)
+            // 완료 상태: 상단 = [상세보기] + 대상별 [➕ 추가] · 하단 = 각 loot 라인 상태별 액션
             List<RaidTarget> targets;
             if (r.getTarget() != null) {
                 targets = List.of(r.getTarget());
@@ -325,15 +325,43 @@ public class DiscordNotifier {
             } else {
                 targets = List.of();
             }
+            List<ActionRow> rows = new ArrayList<>();
+
+            // Row 1: 상세보기 + 대상별 [➕ 추가] (라벨 명확화: '드랍' → '추가')
             List<Button> row1 = new ArrayList<>();
             row1.add(Button.link(siteLink, "상세보기"));
             for (RaidTarget t : targets) {
-                if (row1.size() >= 5) break; // Discord row 최대 5개
-                String label = (t.getIcon() != null && !t.getIcon().isBlank() ? t.getIcon() + " " : "🎯 ")
-                        + t.getName() + " 드랍";
+                if (row1.size() >= 5) break;
+                String label = "➕ " + t.getName() + " 추가";
                 row1.add(Button.primary("loot:add:" + r.getId() + ":" + t.getId(), label));
             }
-            return List.of(ActionRow.of(row1));
+            rows.add(ActionRow.of(row1));
+
+            // Row 2+: 각 loot 라인마다 상태별 액션 (최대 4행 x 5버튼 = 20개)
+            List<RaidLoot> loots = lootRepository.findByRaidId(r.getId());
+            List<Button> lootBtns = new ArrayList<>();
+            for (RaidLoot l : loots) {
+                if (lootBtns.size() >= 20) break;
+                String shortName = l.getItemName();
+                if (shortName.length() > 10) shortName = shortName.substring(0, 10);
+                boolean hasShares = !shareRepository.findByLootId(l.getId()).isEmpty();
+                if (hasShares) {
+                    // 이미 분배됨: 정보만, disabled
+                    lootBtns.add(Button.secondary("loot:done:" + l.getId(), "✅ " + shortName).asDisabled());
+                } else if (l.getSoldPrice() == null || l.getSoldPrice() <= 0) {
+                    // 판매금 없음
+                    lootBtns.add(Button.primary("loot:price:" + l.getId(), "💵 " + shortName));
+                } else {
+                    // 판매금 있음, 미분배
+                    lootBtns.add(Button.success("loot:distribute:" + l.getId(), "⚖️ " + shortName));
+                }
+            }
+            // 5개씩 끊어서 ActionRow 분할
+            for (int i = 0; i < lootBtns.size(); i += 5) {
+                rows.add(ActionRow.of(lootBtns.subList(i, Math.min(i + 5, lootBtns.size()))));
+                if (rows.size() >= 5) break;
+            }
+            return rows;
         }
         return List.of(ActionRow.of(
                 Button.success("raid:vote:" + r.getId() + ":YES", "참가"),

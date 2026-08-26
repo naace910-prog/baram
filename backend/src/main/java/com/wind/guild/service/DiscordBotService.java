@@ -48,6 +48,8 @@ public class DiscordBotService extends ListenerAdapter {
     private final com.wind.guild.repository.RaidAttendeeRepository attendeeRepository;
     private final com.wind.guild.repository.RaidLootRepository lootRepository;
     private final com.wind.guild.repository.LootShareRepository shareRepository;
+    private final com.wind.guild.repository.RaidPartyRepository partyRepositoryLazy;
+    private final com.wind.guild.repository.RaidPartyMemberRepository partyMemberRepositoryLazy;
     private final RaidService raidService;
     private final ObjectProvider<DiscordNotifier> notifierProvider;
     private final ObjectProvider<ChatService> chatServiceProvider;
@@ -486,18 +488,98 @@ public class DiscordBotService extends ListenerAdapter {
                     .setMaxLength(15)
                     .build();
             Modal modal = Modal.create("loot:modal:" + raidId + ":" + targetId,
-                            (t.getIcon() != null ? t.getIcon() + " " : "") + t.getName() + " 드랍 등록")
+                            "➕ " + t.getName() + " 새 드랍 추가")
                     .addComponents(
                             net.dv8tion.jda.api.interactions.components.ActionRow.of(qty),
                             net.dv8tion.jda.api.interactions.components.ActionRow.of(price))
                     .build();
             e.replyModal(modal).queue();
+            return;
+        }
+        if (id.startsWith("loot:price:")) {
+            if (!isMasterByDiscord(e.getUser().getId())) {
+                e.reply("문주/부문주만 편집 가능합니다.").setEphemeral(true).queue();
+                return;
+            }
+            long lootId;
+            try { lootId = Long.parseLong(id.substring("loot:price:".length())); }
+            catch (Exception ex) { e.reply("잘못된 버튼 ID").setEphemeral(true).queue(); return; }
+            var lootOpt = lootRepository.findById(lootId);
+            if (lootOpt.isEmpty()) { e.reply("득템 없음").setEphemeral(true).queue(); return; }
+            var loot = lootOpt.get();
+            TextInput price = TextInput.create("price", "판매금액 (전)", TextInputStyle.SHORT)
+                    .setPlaceholder("예: 5000000")
+                    .setRequired(true).setMaxLength(15)
+                    .setValue(loot.getSoldPrice() != null ? String.valueOf(loot.getSoldPrice()) : "")
+                    .build();
+            Modal modal = Modal.create("loot:pricemodal:" + lootId,
+                            "💵 " + loot.getItemName() + " 판매금 입력")
+                    .addComponents(net.dv8tion.jda.api.interactions.components.ActionRow.of(price))
+                    .build();
+            e.replyModal(modal).queue();
+            return;
+        }
+        if (id.startsWith("loot:distribute:")) {
+            if (!isMasterByDiscord(e.getUser().getId())) {
+                e.reply("문주/부문주만 분배 가능합니다.").setEphemeral(true).queue();
+                return;
+            }
+            long lootId;
+            try { lootId = Long.parseLong(id.substring("loot:distribute:".length())); }
+            catch (Exception ex) { e.reply("잘못된 버튼 ID").setEphemeral(true).queue(); return; }
+            var lootOpt = lootRepository.findById(lootId);
+            if (lootOpt.isEmpty()) { e.reply("득템 없음").setEphemeral(true).queue(); return; }
+            var loot = lootOpt.get();
+            if (loot.getSoldPrice() == null || loot.getSoldPrice() <= 0) {
+                e.reply("판매금액이 없어 분배할 수 없습니다. 먼저 판매금 입력하세요.").setEphemeral(true).queue();
+                return;
+            }
+            // 파티 편성된 memberId 자동 산정
+            int autoDivisor = countPartyMembersUnique(loot.getRaidId());
+            String defaultDiv = autoDivisor > 0 ? String.valueOf(autoDivisor) : "";
+            TextInput div = TextInput.create("divisor", "분배 인원수 (÷ N명)", TextInputStyle.SHORT)
+                    .setPlaceholder("파티 편성 " + autoDivisor + "명 · 미등록 포함 시 늘리세요")
+                    .setRequired(true).setMinLength(1).setMaxLength(3)
+                    .setValue(defaultDiv)
+                    .build();
+            Modal modal = Modal.create("loot:distmodal:" + lootId,
+                            "⚖️ " + loot.getItemName() + " · " + String.format("%,d", loot.getSoldPrice()) + "전 분배")
+                    .addComponents(net.dv8tion.jda.api.interactions.components.ActionRow.of(div))
+                    .build();
+            e.replyModal(modal).queue();
+            return;
         }
     }
+
+    /** 파티에 편성된 등록 문파원 unique 수 (freeName 제외 — 시스템 분배 대상만). */
+    private int countPartyMembersUnique(Long raidId) {
+        try {
+            var parties = partyRepositoryHolder();
+            if (parties == null) return 0;
+            java.util.Set<Long> unique = new java.util.HashSet<>();
+            for (var p : parties.findByRaidIdOrderByDisplayOrderAsc(raidId)) {
+                if (p.getMikeMemberId() != null) unique.add(p.getMikeMemberId());
+                for (var m : partyMemberRepositoryHolder().findByPartyIdOrderByRoleAscDisplayOrderAsc(p.getId())) {
+                    if (m.getMemberId() != null) unique.add(m.getMemberId());
+                }
+            }
+            return unique.size();
+        } catch (Exception ex) { return 0; }
+    }
+    private com.wind.guild.repository.RaidPartyRepository partyRepositoryHolder() { return partyRepositoryLazy; }
+    private com.wind.guild.repository.RaidPartyMemberRepository partyMemberRepositoryHolder() { return partyMemberRepositoryLazy; }
 
     @Override
     public void onModalInteraction(ModalInteractionEvent e) {
         String id = e.getModalId();
+        if (id.startsWith("loot:pricemodal:")) {
+            handlePriceModal(e, id);
+            return;
+        }
+        if (id.startsWith("loot:distmodal:")) {
+            handleDistributeModal(e, id);
+            return;
+        }
         if (!id.startsWith("loot:modal:")) return;
         e.deferReply(true).queue();
         try {
@@ -648,6 +730,102 @@ public class DiscordBotService extends ListenerAdapter {
         LocalDateTime result = LocalDateTime.of(year, month, day, hour, minute);
         if (!dateFound && result.isBefore(now)) result = result.plusDays(1);
         return result;
+    }
+
+    private void handlePriceModal(ModalInteractionEvent e, String id) {
+        e.deferReply(true).queue();
+        try {
+            if (!isMasterByDiscord(e.getUser().getId())) {
+                e.getHook().sendMessage("문주/부문주만 편집 가능합니다").setEphemeral(true).queue();
+                return;
+            }
+            long lootId = Long.parseLong(id.substring("loot:pricemodal:".length()));
+            String priceStr = e.getValue("price") != null ? e.getValue("price").getAsString().trim().replace(",", "") : "";
+            long price;
+            try {
+                price = Long.parseLong(priceStr);
+                if (price < 0) throw new NumberFormatException();
+            } catch (Exception ex) {
+                e.getHook().sendMessage("판매금액은 0 이상 숫자여야 합니다").setEphemeral(true).queue();
+                return;
+            }
+            LootService ls = lootServiceProvider.getIfAvailable();
+            var lootOpt = lootRepository.findById(lootId);
+            if (ls == null || lootOpt.isEmpty()) {
+                e.getHook().sendMessage("득템 없음 or 서버 초기화 중").setEphemeral(true).queue();
+                return;
+            }
+            var loot = lootOpt.get();
+            ls.upsert(loot.getRaidId(), lootId, new com.wind.guild.web.dto.LootDto.UpsertLootRequest(
+                    loot.getTargetId(), loot.getItemName(), true, price, loot.getMemo()));
+            DiscordNotifier n = notifier();
+            if (n != null) n.syncRaidCardFresh(loot.getRaidId(), DiscordNotifier.RaidTrigger.LOOT);
+            ChatService cs = chatService();
+            if (cs != null) cs.saveSystem("💵 [Discord] " + loot.getItemName() + " 판매금 " + String.format("%,d", price) + "전");
+            e.getHook().sendMessage("✅ 판매금 등록 완료 · " + String.format("%,d", price) + "전 · 이제 [⚖️ 분배] 버튼으로 진행").setEphemeral(true).queue();
+        } catch (Exception ex) {
+            log.warn("price modal failed: {}", ex.toString());
+            try { e.getHook().sendMessage("에러: " + ex.getMessage()).setEphemeral(true).queue(); } catch (Exception ignore) {}
+        }
+    }
+
+    private void handleDistributeModal(ModalInteractionEvent e, String id) {
+        e.deferReply(true).queue();
+        try {
+            if (!isMasterByDiscord(e.getUser().getId())) {
+                e.getHook().sendMessage("문주/부문주만 분배 가능합니다").setEphemeral(true).queue();
+                return;
+            }
+            long lootId = Long.parseLong(id.substring("loot:distmodal:".length()));
+            String divStr = e.getValue("divisor") != null ? e.getValue("divisor").getAsString().trim() : "";
+            int divisor;
+            try {
+                divisor = Integer.parseInt(divStr);
+                if (divisor < 1) throw new NumberFormatException();
+            } catch (Exception ex) {
+                e.getHook().sendMessage("분배 인원수는 1 이상 정수여야 합니다").setEphemeral(true).queue();
+                return;
+            }
+            var lootOpt = lootRepository.findById(lootId);
+            if (lootOpt.isEmpty()) {
+                e.getHook().sendMessage("득템 없음").setEphemeral(true).queue();
+                return;
+            }
+            var loot = lootOpt.get();
+            // 파티 편성된 등록 문파원 memberId 수집
+            java.util.LinkedHashSet<Long> memberIds = new java.util.LinkedHashSet<>();
+            for (var p : partyRepositoryLazy.findByRaidIdOrderByDisplayOrderAsc(loot.getRaidId())) {
+                if (p.getMikeMemberId() != null) memberIds.add(p.getMikeMemberId());
+                for (var m : partyMemberRepositoryLazy.findByPartyIdOrderByRoleAscDisplayOrderAsc(p.getId())) {
+                    if (m.getMemberId() != null) memberIds.add(m.getMemberId());
+                }
+            }
+            if (memberIds.isEmpty()) {
+                e.getHook().sendMessage("파티에 편성된 등록 문파원이 없습니다 (사이트에서 파티 편성 필요)").setEphemeral(true).queue();
+                return;
+            }
+            if (divisor < memberIds.size()) {
+                e.getHook().sendMessage("분배 인원수(" + divisor + ") 는 파티 등록 문파원(" + memberIds.size() + ") 이상이어야 합니다").setEphemeral(true).queue();
+                return;
+            }
+            LootService ls = lootServiceProvider.getIfAvailable();
+            if (ls == null) {
+                e.getHook().sendMessage("서버 초기화 중").setEphemeral(true).queue();
+                return;
+            }
+            ls.distribute(lootId, new java.util.ArrayList<>(memberIds), divisor);
+            DiscordNotifier n = notifier();
+            if (n != null) n.syncRaidCardFresh(loot.getRaidId(), DiscordNotifier.RaidTrigger.LOOT);
+            long per = loot.getSoldPrice() / divisor;
+            String extLabel = divisor > memberIds.size() ? " (외부 " + (divisor - memberIds.size()) + "명 포함)" : "";
+            ChatService cs = chatService();
+            if (cs != null) cs.saveSystem("⚖️ [Discord] " + loot.getItemName() + " " + String.format("%,d", loot.getSoldPrice()) + "전 · "
+                    + divisor + "명" + extLabel + " · 1인 " + String.format("%,d", per) + "전");
+            e.getHook().sendMessage("✅ 분배 완료 · " + divisor + "명" + extLabel + " · 1인 " + String.format("%,d", per) + "전").setEphemeral(true).queue();
+        } catch (Exception ex) {
+            log.warn("distribute modal failed: {}", ex.toString());
+            try { e.getHook().sendMessage("에러: " + ex.getMessage()).setEphemeral(true).queue(); } catch (Exception ignore) {}
+        }
     }
 
     @PreDestroy
