@@ -80,7 +80,8 @@ public class RaidController {
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable Long id) {
-        raidService.delete(id);
+        java.util.List<Long> discordMsgIds = raidService.delete(id);
+        for (Long mid : discordMsgIds) discord.deleteRaidCard(mid);
         return ResponseEntity.noContent().build();
     }
 

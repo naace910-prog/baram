@@ -21,6 +21,7 @@ public class ChatDiscordBridge {
                 && props.getChatChannelId() != null && !props.getChatChannelId().isBlank();
     }
 
+    @org.springframework.scheduling.annotation.Async("discordExecutor")
     public void relayToDiscord(ChatDto.MessageView msg) {
         if (!isEnabled()) return;
         DiscordBotService bot = botProvider.getIfAvailable();

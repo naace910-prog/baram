@@ -587,8 +587,25 @@ public class DiscordNotifier {
     }
 
     // 하위 호환 (기존 호출부용 shim)
+    @org.springframework.scheduling.annotation.Async("discordExecutor")
     public void notifyRaidCreated(Long raidId) { syncRaidCard(raidId, RaidTrigger.CREATED); }
+    @org.springframework.scheduling.annotation.Async("discordExecutor")
     public void notifyRaidPre30(Long raidId) { syncRaidCard(raidId, RaidTrigger.PRE30); }
+
+    /** 레이드 삭제 시 Discord 카드도 삭제 (있으면). */
+    @org.springframework.scheduling.annotation.Async("discordExecutor")
+    public void deleteRaidCard(Long discordMessageId) {
+        if (discordMessageId == null) return;
+        try {
+            DiscordBotService b = bot();
+            if (b == null || !b.isReady()) return;
+            TextChannel ch = b.notifyChannel();
+            if (ch == null) return;
+            ch.deleteMessageById(discordMessageId).queue(null, err -> log.debug("delete raid card failed: {}", err.toString()));
+        } catch (Exception e) {
+            log.debug("deleteRaidCard error: {}", e.toString());
+        }
+    }
 
     /** notify 채널에 텍스트 메시지 발송 (알림 등 별도 메시지용). */
     @org.springframework.scheduling.annotation.Async("discordExecutor")
@@ -644,5 +661,6 @@ public class DiscordNotifier {
             log.debug("postRaidPre30Fresh error: {}", e.toString());
         }
     }
+    @org.springframework.scheduling.annotation.Async("discordExecutor")
     public void updateEmbed(Long raidId) { syncRaidCard(raidId, RaidTrigger.VOTE); }
 }

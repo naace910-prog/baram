@@ -23,6 +23,7 @@ public class ChatBroadcaster {
     public void unregister(WebSocketSession s) { sessions.remove(s); }
     public int connectedCount() { return sessions.size(); }
 
+    @org.springframework.scheduling.annotation.Async("discordExecutor")
     public void broadcast(ChatDto.MessageView msg) {
         String json;
         try {

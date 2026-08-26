@@ -12,8 +12,11 @@ export default function RaidCreatePage() {
   const { message } = AntApp.useApp()
   const [form] = Form.useForm()
   const [category, setCategory] = useState<RaidCategory>('FANG')
+  const [submitting, setSubmitting] = useState(false)
 
   const onFinish = async (v: { scheduledAt: Dayjs; memo?: string }) => {
+    if (submitting) return  // 중복 클릭 방지
+    setSubmitting(true)
     try {
       const r = await raidApi.create({
         category,
@@ -23,7 +26,9 @@ export default function RaidCreatePage() {
       message.success('레이드 등록 완료')
       qc.invalidateQueries({ queryKey: ['raids'] })
       nav(`/raids/${r.id}`)
-    } catch {}
+    } catch {
+      setSubmitting(false)  // 실패 시만 해제 (성공 시 페이지 이동)
+    }
   }
 
   return (
@@ -73,8 +78,9 @@ export default function RaidCreatePage() {
           />
 
           <div style={{ display: 'flex', gap: 8 }}>
-            <Button size="large" onClick={() => nav(-1)}>취소</Button>
-            <Button size="large" type="primary" htmlType="submit" style={{ flex: 1 }}>등록</Button>
+            <Button size="large" onClick={() => nav(-1)} disabled={submitting}>취소</Button>
+            <Button size="large" type="primary" htmlType="submit" style={{ flex: 1 }}
+                    loading={submitting} disabled={submitting}>등록</Button>
           </div>
         </Form>
       </Card>

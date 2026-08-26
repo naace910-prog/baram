@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -120,10 +121,21 @@ public class RaidService {
         if (category == null) {
             throw new IllegalArgumentException("레이드 카테고리를 지정해주세요");
         }
+        // 중복 등록 방지: 같은 (target, scheduledAt) 조합이 이미 있으면 그것을 반환 (더블클릭 대응)
+        LocalDateTime scheduledAt = req.scheduledAt();
+        java.util.Optional<Raid> existing;
+        if (target != null) {
+            existing = raidRepository.findFirstByTarget_IdAndScheduledAt(target.getId(), scheduledAt);
+        } else {
+            existing = raidRepository.findFirstByCategoryAndScheduledAtAndTargetIsNull(category, scheduledAt);
+        }
+        if (existing.isPresent()) {
+            return existing.get();
+        }
         return raidRepository.save(Raid.builder()
                 .target(target)
                 .category(category)
-                .scheduledAt(req.scheduledAt())
+                .scheduledAt(scheduledAt)
                 .memo(req.memo())
                 .status(RaidStatus.PLANNED)
                 .build());
@@ -145,9 +157,17 @@ public class RaidService {
         return r;
     }
 
-    public void delete(Long id) {
+    /** 레이드 + 관련 데이터 삭제. Discord 메시지 ID 리스트 반환 (raid card + 개별 loot cards). */
+    public java.util.List<Long> delete(Long id) {
+        // 삭제 전에 모든 discordMessageId 수집
+        java.util.List<Long> msgIds = new java.util.ArrayList<>();
+        raidRepository.findById(id).map(Raid::getDiscordMessageId).ifPresent(msgIds::add);
+        java.util.List<RaidLoot> loots = lootRepository.findByRaidId(id);
+        for (RaidLoot l : loots) {
+            if (l.getDiscordMessageId() != null) msgIds.add(l.getDiscordMessageId());
+        }
         // 정산·득템·파티(멤버포함)·투표·참가확정 모두 cascade 삭제
-        for (RaidLoot l : lootRepository.findByRaidId(id)) {
+        for (RaidLoot l : loots) {
             lootShareRepository.deleteByLootId(l.getId());
         }
         lootRepository.deleteByRaidId(id);
@@ -158,6 +178,7 @@ public class RaidService {
         voteRepository.deleteByRaidId(id);
         attendeeRepository.deleteByRaidId(id);
         raidRepository.deleteById(id);
+        return msgIds;
     }
 
     public void vote(Long raidId, Long memberId, VoteType vote) {
