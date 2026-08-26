@@ -3,8 +3,10 @@ package com.wind.guild.web;
 import com.wind.guild.config.SessionKeys;
 import com.wind.guild.domain.Raid;
 import com.wind.guild.repository.MemberRepository;
+import com.wind.guild.repository.RaidRepository;
 import com.wind.guild.service.ChatService;
 import com.wind.guild.service.DiscordNotifier;
+import com.wind.guild.service.RaidScheduler;
 import com.wind.guild.service.RaidService;
 import com.wind.guild.service.WebPushService;
 import com.wind.guild.web.dto.RaidDto;
@@ -28,6 +30,8 @@ public class RaidController {
     private final WebPushService push;
     private final ChatService chat;
     private final MemberRepository memberRepo;
+    private final RaidRepository raidRepo;
+    private final RaidScheduler scheduler;
 
     @GetMapping
     public List<RaidDto.ListView> list() {
@@ -112,6 +116,18 @@ public class RaidController {
             @Valid @RequestBody RaidDto.AttendeeRequest req) {
         raidService.setAttendees(raidId, req.memberIds());
         discord.syncRaidCard(raidId, DiscordNotifier.RaidTrigger.ATTENDEES);
+        return raidService.get(raidId);
+    }
+
+    @PostMapping("/{id}/send-pre30")
+    public RaidDto.DetailView sendPre30Manual(@PathVariable("id") Long raidId, HttpSession session) {
+        String role = (String) session.getAttribute(SessionKeys.MEMBER_ROLE);
+        if (!"MASTER".equals(role) && !"VICE".equals(role)) {
+            throw new IllegalStateException("문주/부문주만 실행 가능합니다");
+        }
+        Raid r = raidRepo.findById(raidId)
+                .orElseThrow(() -> new IllegalArgumentException("레이드 없음: " + raidId));
+        scheduler.dispatchPre30(r, /*manual*/ true);
         return raidService.get(raidId);
     }
 }

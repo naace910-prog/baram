@@ -119,11 +119,38 @@ export default function RaidDetailPage() {
     })
   }
 
+  const sendPre30 = () => {
+    modal.confirm({
+      title: '수동 30분 리마인더 발송',
+      content: (
+        <div>
+          <div>Discord 알림 채널에 <b>@here 멘션</b> 새 메시지 + 웹 푸시 + 채팅 시스템 메시지 발송.</div>
+          <div style={{ marginTop: 8, color: '#ff4d4f' }}>⚠️ pre30Sent 마킹 → 자동 발송은 이후 중복되지 않음. 이미 자동 발송된 레이드는 재발송 불가.</div>
+          <div style={{ marginTop: 8 }}>레이드 시간이 이미 지났어도 발송은 됩니다 (경과 시간은 "0분 뒤" 로 표기).</div>
+        </div>
+      ),
+      okText: '지금 발송',
+      cancelText: '취소',
+      onOk: async () => {
+        try {
+          await raidApi.sendPre30Manual(raidId)
+          message.success('리마인더 발송 완료')
+          qc.invalidateQueries({ queryKey: ['raid', raidId] })
+        } catch (e: any) {
+          message.error(e?.response?.data?.error ?? '발송 실패')
+        }
+      },
+    })
+  }
+
   return (
     <>
       <div className="page-header">
         <h2 style={{ margin: 0 }}>레이드 상세</h2>
-        <Space>
+        <Space wrap>
+          {isMaster(user) && raid.status === 'PLANNED' && (
+            <Button onClick={sendPre30}>🔔 리마인더 발송</Button>
+          )}
           <Button onClick={() => nav(`/raids/${raidId}/parties`)}>파티 편성</Button>
           {isMaster(user) && <Button danger onClick={removeRaid}>삭제</Button>}
         </Space>

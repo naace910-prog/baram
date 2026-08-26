@@ -40,21 +40,31 @@ public class RaidScheduler {
                 RaidStatus.PLANNED, from, to);
         for (Raid r : ready) {
             try {
-                long minsLeft = Math.max(0, java.time.Duration.between(now, r.getScheduledAt()).toMinutes());
-                // Discord: **새 메시지** 로 발송 (편집이 아니라 실제 알림 트리거)
-                notifier.postRaidPre30Fresh(r.getId());
-                String label = raidLabel(r);
-                push.sendToAll("⏰ 곧 시작: " + label + " (" + minsLeft + "분 뒤)",
-                        r.getScheduledAt().format(FMT),
-                        "/raids/" + r.getId());
-                chat.saveSystem("⏰ " + minsLeft + "분 뒤 시작 · " + label + " · " + r.getScheduledAt().format(FMT),
-                        "RAID_VOTE", r.getId());
-                r.setPre30Sent(true);
-                raidRepository.save(r);
+                dispatchPre30(r, /*manual*/ false);
             } catch (Exception e) {
                 log.warn("pre-30 notify failed for raid {}: {}", r.getId(), e.toString());
             }
         }
+    }
+
+    /**
+     * 30분 리마인더 발송 로직. 스케줄러와 수동 트리거가 공유.
+     * Discord (@here) + push + chat + pre30Sent=true.
+     */
+    @Transactional
+    public void dispatchPre30(Raid r, boolean manual) {
+        LocalDateTime now = LocalDateTime.now();
+        long minsLeft = Math.max(0, java.time.Duration.between(now, r.getScheduledAt()).toMinutes());
+        notifier.postRaidPre30Fresh(r.getId());
+        String label = raidLabel(r);
+        String prefix = manual ? "🔔 문주 발송 · " : "⏰ ";
+        push.sendToAll(prefix + "곧 시작: " + label + " (" + minsLeft + "분 뒤)",
+                r.getScheduledAt().format(FMT),
+                "/raids/" + r.getId());
+        chat.saveSystem(prefix + minsLeft + "분 뒤 시작 · " + label + " · " + r.getScheduledAt().format(FMT),
+                "RAID_VOTE", r.getId());
+        r.setPre30Sent(true);
+        raidRepository.save(r);
     }
 
     @Scheduled(fixedDelay = 60_000, initialDelay = 45_000)

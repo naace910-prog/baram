@@ -72,6 +72,8 @@ export const raidApi = {
     http.post<RaidDetail>(`/raids/${id}/votes`, { vote }).then((r) => r.data),
   setAttendees: (id: number, memberIds: number[]) =>
     http.put<RaidDetail>(`/raids/${id}/attendees`, { memberIds }).then((r) => r.data),
+  sendPre30Manual: (id: number) =>
+    http.post<RaidDetail>(`/raids/${id}/send-pre30`).then((r) => r.data),
 }
 
 export const statsApi = {
