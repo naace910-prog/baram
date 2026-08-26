@@ -368,5 +368,35 @@ public class DiscordNotifier {
     // 하위 호환 (기존 호출부용 shim)
     public void notifyRaidCreated(Long raidId) { syncRaidCard(raidId, RaidTrigger.CREATED); }
     public void notifyRaidPre30(Long raidId) { syncRaidCard(raidId, RaidTrigger.PRE30); }
+
+    // 30분 전 리마인더는 **새 메시지** 로 (알림 트리거를 위해)
+    public void postRaidPre30Fresh(Long raidId) {
+        try {
+            DiscordBotService b = bot();
+            if (b == null || !b.isReady()) return;
+            TextChannel ch = b.notifyChannel();
+            if (ch == null) return;
+            Raid r = raidRepository.findById(raidId).orElse(null);
+            if (r == null) return;
+            long minsLeft = Math.max(0,
+                    java.time.Duration.between(java.time.LocalDateTime.now(), r.getScheduledAt()).toMinutes());
+            String label;
+            if (r.getTarget() != null) {
+                label = (r.getTarget().getIcon() != null ? r.getTarget().getIcon() + " " : "") + r.getTarget().getName();
+            } else if (r.getCategory() == RaidCategory.FANG) {
+                label = "🐲 어금니 레이드";
+            } else if (r.getCategory() == RaidCategory.SKULL_KING) {
+                label = "💀 해골왕 레이드";
+            } else {
+                label = "레이드";
+            }
+            String msg = "@here ⏰ **곧 시작: " + label + "**"
+                    + " · " + r.getScheduledAt().format(FMT)
+                    + " (" + minsLeft + "분 뒤) · 준비 요망";
+            ch.sendMessage(msg).queue(null, err -> log.debug("pre30 fresh send failed: {}", err.toString()));
+        } catch (Exception e) {
+            log.debug("postRaidPre30Fresh error: {}", e.toString());
+        }
+    }
     public void updateEmbed(Long raidId) { syncRaidCard(raidId, RaidTrigger.VOTE); }
 }

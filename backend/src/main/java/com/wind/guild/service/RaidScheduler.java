@@ -26,24 +26,28 @@ public class RaidScheduler {
     private final WebPushService push;
     private final ChatService chat;
 
-    private static final DateTimeFormatter FMT = DateTimeFormatter.ofPattern("MM/dd HH:mm");
+    private static final DateTimeFormatter FMT = DateTimeFormatter.ofPattern("MM/dd(E) HH:mm", java.util.Locale.KOREAN);
 
     @Scheduled(fixedDelay = 60_000, initialDelay = 30_000)
     @Transactional
     public void checkPre30() {
         LocalDateTime now = LocalDateTime.now();
-        LocalDateTime from = now.plusMinutes(29);
-        LocalDateTime to = now.plusMinutes(31);
+        // 창을 넓힘 (지금 ~ 30분 이내). pre30Sent=false 로 1회만 발송.
+        // 이유: 이전엔 (now+29 ~ now+31) 2분 창이라 Render sleep · 30분내 늦게 등록된 레이드는 놓쳤음.
+        LocalDateTime from = now;
+        LocalDateTime to = now.plusMinutes(30);
         List<Raid> ready = raidRepository.findByStatusAndPre30SentFalseAndScheduledAtBetween(
                 RaidStatus.PLANNED, from, to);
         for (Raid r : ready) {
             try {
-                notifier.notifyRaidPre30(r.getId());
+                long minsLeft = Math.max(0, java.time.Duration.between(now, r.getScheduledAt()).toMinutes());
+                // Discord: **새 메시지** 로 발송 (편집이 아니라 실제 알림 트리거)
+                notifier.postRaidPre30Fresh(r.getId());
                 String label = raidLabel(r);
-                push.sendToAll("⏰ 30분 뒤 시작: " + label,
-                        r.getScheduledAt().format(FMT) + " · 곧 시작합니다",
+                push.sendToAll("⏰ 곧 시작: " + label + " (" + minsLeft + "분 뒤)",
+                        r.getScheduledAt().format(FMT),
                         "/raids/" + r.getId());
-                chat.saveSystem("⏰ 30분 뒤 시작 · " + label + " · " + r.getScheduledAt().format(FMT),
+                chat.saveSystem("⏰ " + minsLeft + "분 뒤 시작 · " + label + " · " + r.getScheduledAt().format(FMT),
                         "RAID_VOTE", r.getId());
                 r.setPre30Sent(true);
                 raidRepository.save(r);
