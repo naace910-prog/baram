@@ -2,7 +2,10 @@ package com.wind.guild.service;
 
 import com.wind.guild.domain.Raid;
 import com.wind.guild.domain.RaidCategory;
+import com.wind.guild.domain.RaidLoot;
 import com.wind.guild.domain.RaidStatus;
+import com.wind.guild.repository.RaidLootRepository;
+import com.wind.guild.repository.LootShareRepository;
 import com.wind.guild.repository.RaidRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,6 +25,8 @@ import java.util.List;
 public class RaidScheduler {
 
     private final RaidRepository raidRepository;
+    private final RaidLootRepository lootRepository;
+    private final LootShareRepository shareRepository;
     private final DiscordNotifier notifier;
     private final WebPushService push;
     private final ChatService chat;
@@ -86,6 +91,46 @@ public class RaidScheduler {
                 log.info("자동 완료 처리: raid={} {}", r.getId(), label);
             } catch (Exception e) {
                 log.warn("자동 완료 실패 raid {}: {}", r.getId(), e.toString());
+            }
+        }
+    }
+
+    /** DONE 이후 24시간 경과 · 판매금 없거나 미분배 loot 있는 raid → 한 번만 discord 알림. */
+    @Scheduled(fixedDelay = 3600_000, initialDelay = 90_000)  // 1시간마다
+    @Transactional
+    public void checkStaleDistribution() {
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime before = now.minusHours(24);
+        LocalDateTime after = now.minusDays(7);  // 7일 전~어제 사이 완료된 것만 (더 오래된 backfill 스팸 방지)
+        List<Raid> candidates = raidRepository.findByStatusAndScheduledAtBetween(
+                RaidStatus.DONE, after, before);
+        for (Raid r : candidates) {
+            if (r.isStaleDistAlerted()) continue;
+            try {
+                List<RaidLoot> loots = lootRepository.findByRaidId(r.getId());
+                if (loots.isEmpty()) continue;
+                List<String> pending = new java.util.ArrayList<>();
+                for (RaidLoot l : loots) {
+                    if (!l.isDropped()) continue;
+                    if (l.getSoldPrice() == null || l.getSoldPrice() <= 0) {
+                        pending.add(l.getItemName() + " (판매금 미입력)");
+                    } else if (shareRepository.findByLootId(l.getId()).isEmpty()) {
+                        pending.add(l.getItemName() + " (미분배)");
+                    }
+                }
+                if (pending.isEmpty()) continue;
+                String label = raidLabel(r);
+                String msg = "⚠️ **" + label + "** · " + r.getScheduledAt().format(FMT)
+                        + " 완료 후 24시간 경과, 처리 필요 항목:\n"
+                        + "  · " + String.join("\n  · ", pending)
+                        + "\n사이트 또는 카드 버튼으로 진행하세요.";
+                notifier.postAlertMessage(msg);
+                chat.saveSystem(msg);
+                r.setStaleDistAlerted(true);
+                raidRepository.save(r);
+                log.info("stale-dist alert: raid={} pending={}", r.getId(), pending);
+            } catch (Exception ex) {
+                log.warn("stale-dist alert failed raid {}: {}", r.getId(), ex.toString());
             }
         }
     }

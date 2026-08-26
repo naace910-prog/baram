@@ -95,7 +95,7 @@ public class PartyController {
                                              @Valid @RequestBody PartyDto.MembersReplaceRequest req) {
         PartyDto.PartyView view = service.replaceMembers(partyId, req);
         partyRepo.findById(partyId).ifPresent(p -> {
-            discord.syncRaidCardFresh(p.getRaidId(), DiscordNotifier.RaidTrigger.PARTY);
+            discord.syncRaidCardCategoryAware(p.getRaidId(), DiscordNotifier.RaidTrigger.PARTY);
             postPartySummaryToChat(p.getRaidId(), "저장");
         });
         return view;
@@ -104,7 +104,7 @@ public class PartyController {
     @PostMapping("/api/raids/{raidId}/parties/auto-assign")
     public PartyDto.AutoAssignResult autoAssign(@PathVariable Long raidId) {
         PartyDto.AutoAssignResult result = service.autoAssignFromPrevious(raidId);
-        discord.syncRaidCardFresh(raidId, DiscordNotifier.RaidTrigger.PARTY);
+        discord.syncRaidCardCategoryAware(raidId, DiscordNotifier.RaidTrigger.PARTY);
         try {
             String msg = String.format("🤖 직전 %s 파티 자동배정 · %d파티 · %d명 승계 · 신규 %d명 · 이탈 %d명",
                     result.basis(), result.carriedParties(), result.assignedMembers(),

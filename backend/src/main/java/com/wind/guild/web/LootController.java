@@ -43,7 +43,7 @@ public class LootController {
     public List<LootDto.LootView> create(@PathVariable Long raidId,
                                          @Valid @RequestBody LootDto.UpsertLootRequest req) {
         lootService.upsert(raidId, null, req);
-        discord.syncRaidCardFresh(raidId, DiscordNotifier.RaidTrigger.LOOT);
+        discord.syncRaidCardCategoryAware(raidId, DiscordNotifier.RaidTrigger.LOOT);
         try {
             chat.saveSystem("💰 득템 등록 · " + req.itemName()
                     + (req.dropped() ? "" : " (노드랍)")
@@ -56,7 +56,7 @@ public class LootController {
     public List<LootDto.LootView> bulkAdd(@PathVariable Long raidId,
                                           @Valid @RequestBody LootDto.BulkAddRequest req) {
         lootService.bulkAdd(raidId, req);
-        discord.syncRaidCardFresh(raidId, DiscordNotifier.RaidTrigger.LOOT);
+        discord.syncRaidCardCategoryAware(raidId, DiscordNotifier.RaidTrigger.LOOT);
         try {
             StringBuilder sb = new StringBuilder("💰 드랍 일괄등록 · ");
             long totalPrice = 0;
@@ -95,8 +95,10 @@ public class LootController {
 
     @PostMapping("/{lootId}/distribute")
     public List<LootDto.LootView> distribute(@PathVariable Long raidId, @PathVariable Long lootId,
-                                             @Valid @RequestBody LootDto.DistributeRequest req) {
-        lootService.distribute(lootId, req.memberIds(), req.divisor());
+                                             @Valid @RequestBody LootDto.DistributeRequest req,
+                                             HttpSession session) {
+        Long actorId = (Long) session.getAttribute(SessionKeys.MEMBER_ID);
+        lootService.distribute(lootId, req.memberIds(), req.divisor(), actorId);
         discord.syncLootCard(lootId, DiscordNotifier.LootTrigger.DISTRIBUTED);
         // 분배는 EDIT (여러 드랍 분배 시 스팸 방지 · 최초 카드는 유지)
         discord.syncRaidCard(raidId, DiscordNotifier.RaidTrigger.LOOT);

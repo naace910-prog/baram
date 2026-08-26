@@ -96,6 +96,8 @@ export interface Loot {
   soldPrice?: number | null
   soldAt?: string | null
   memo?: string | null
+  distributedByNickname?: string | null
+  distributedAt?: string | null
   shares: LootShare[]
 }
 

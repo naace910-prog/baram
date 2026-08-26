@@ -37,6 +37,9 @@ public class LootService {
             memberIds.add(s.getMemberId());
             if (s.getPaidBy() != null) memberIds.add(s.getPaidBy());
         }
+        for (RaidLoot l : loots) {
+            if (l.getDistributedBy() != null) memberIds.add(l.getDistributedBy());
+        }
         Map<Long, String> nickMap = memberRepository.findAllById(memberIds).stream()
                 .collect(Collectors.toMap(Member::getId, Member::getNickname));
 
@@ -60,12 +63,15 @@ public class LootService {
                         s.isReceived(), s.getReceivedAt()))
                 .toList();
         RaidTarget t = l.getTargetId() != null ? targetMap.get(l.getTargetId()) : null;
+        String distByNick = l.getDistributedBy() != null ? nickMap.get(l.getDistributedBy()) : null;
         return new LootDto.LootView(
                 l.getId(), l.getRaidId(),
                 l.getTargetId(),
                 t != null ? t.getName() : null,
                 t != null ? t.getIcon() : null,
-                l.getItemName(), l.isDropped(), l.getSoldPrice(), l.getSoldAt(), l.getMemo(), shares);
+                l.getItemName(), l.isDropped(), l.getSoldPrice(), l.getSoldAt(), l.getMemo(),
+                distByNick, l.getDistributedAt(),
+                shares);
     }
 
     public RaidLoot upsert(Long raidId, Long lootId, LootDto.UpsertLootRequest req) {
@@ -112,6 +118,10 @@ public class LootService {
     }
 
     public void distribute(Long lootId, List<Long> memberIds, Integer divisorOverride) {
+        distribute(lootId, memberIds, divisorOverride, null);
+    }
+
+    public void distribute(Long lootId, List<Long> memberIds, Integer divisorOverride, Long actorMemberId) {
         RaidLoot l = lootRepository.findById(lootId)
                 .orElseThrow(() -> new IllegalArgumentException("득템 없음: " + lootId));
         if (l.getSoldPrice() == null || l.getSoldPrice() <= 0) {
@@ -147,6 +157,9 @@ public class LootService {
                     .paid(false)
                     .build());
         }
+        // 분배자·분배시각 기록
+        l.setDistributedBy(actorMemberId);
+        l.setDistributedAt(LocalDateTime.now());
     }
 
     public void markPaid(Long shareId, boolean paid, Long actorMemberId) {

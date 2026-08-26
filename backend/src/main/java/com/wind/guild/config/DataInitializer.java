@@ -68,6 +68,19 @@ public class DataInitializer implements CommandLineRunner {
                 "ALTER TABLE loot_shares ADD COLUMN IF NOT EXISTS received_at TIMESTAMP");
         runSchemaFix("loot_shares_paid_by",
                 "ALTER TABLE loot_shares ADD COLUMN IF NOT EXISTS paid_by BIGINT");
+        // v1.0.29: 카테고리별 최초 발송 flag + 분배자 + 하루 후 미분배 알림 flag
+        runSchemaFix("raids_party_fresh_sent",
+                "ALTER TABLE raids ADD COLUMN IF NOT EXISTS party_fresh_sent BOOLEAN NOT NULL DEFAULT FALSE");
+        runSchemaFix("raids_loot_fresh_sent",
+                "ALTER TABLE raids ADD COLUMN IF NOT EXISTS loot_fresh_sent BOOLEAN NOT NULL DEFAULT FALSE");
+        runSchemaFix("raids_dist_fresh_sent",
+                "ALTER TABLE raids ADD COLUMN IF NOT EXISTS dist_fresh_sent BOOLEAN NOT NULL DEFAULT FALSE");
+        runSchemaFix("raids_stale_dist_alerted",
+                "ALTER TABLE raids ADD COLUMN IF NOT EXISTS stale_dist_alerted BOOLEAN NOT NULL DEFAULT FALSE");
+        runSchemaFix("raid_loots_distributed_by",
+                "ALTER TABLE raid_loots ADD COLUMN IF NOT EXISTS distributed_by BIGINT");
+        runSchemaFix("raid_loots_distributed_at",
+                "ALTER TABLE raid_loots ADD COLUMN IF NOT EXISTS distributed_at TIMESTAMP");
 
         if (memberRepository.count() == 0) {
             memberRepository.save(Member.builder()

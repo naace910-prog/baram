@@ -27,6 +27,8 @@ public class LootDto {
             Long soldPrice,
             LocalDateTime soldAt,
             String memo,
+            String distributedByNickname,
+            LocalDateTime distributedAt,
             List<ShareView> shares) {}
 
     public record ShareView(

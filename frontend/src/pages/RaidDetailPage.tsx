@@ -264,6 +264,11 @@ export default function RaidDetailPage() {
                 </Space>
               }>
                 {l.memo && <div style={{ color: '#999', marginBottom: 8 }}>{l.memo}</div>}
+                {l.distributedByNickname && l.distributedAt && (
+                  <div style={{ color: '#8c8c8c', fontSize: 12, marginBottom: 8 }}>
+                    ⚖️ 분배: <b>{l.distributedByNickname}</b> · {dayjs(l.distributedAt).format('MM/DD HH:mm')}
+                  </div>
+                )}
                 {l.shares.length === 0 ? (
                   <div style={{ color: '#999' }}>아직 분배 안 됨</div>
                 ) : (

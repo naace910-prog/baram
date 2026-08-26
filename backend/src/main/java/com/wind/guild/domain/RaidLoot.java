@@ -5,6 +5,7 @@ import lombok.*;
 
 import java.time.LocalDateTime;
 
+
 @Entity
 @Table(name = "raid_loots")
 @Getter @Setter
@@ -37,4 +38,10 @@ public class RaidLoot {
 
     @Column
     private Long discordMessageId;
+
+    @Column(name = "distributed_by")
+    private Long distributedBy;
+
+    @Column
+    private LocalDateTime distributedAt;
 }

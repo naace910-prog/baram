@@ -3,20 +3,15 @@ package com.wind.guild.config;
 public final class AppVersion {
     private AppVersion() {}
 
-    public static final String VERSION = "v1.0.28";
+    public static final String VERSION = "v1.0.29";
 
     public static final String CHANGELOG =
-            "🔧 hotfix: 판매금 모달 TextInput.setValue('') 예외 (판매금 null 인 경우)\n" +
-            "\n" +
-            "• 통계 미정산 = **총 판매금 - 지급완료** (미등록 인원 몫도 포함)\n" +
-            "• 통계 대상별 실적 = **loot.targetId 기반** (어금니 안 흑룡/묵룡/감룡/진룡 개별 카운트)\n" +
-            "• Discord 완료 카드 loot 라인별 **3단계 버튼** 재정리:\n" +
-            "  · 판매금 없음: [💵 이름] → 판매금 모달 (숫자 1개)\n" +
-            "  · 판매금 있음, 미분배: [⚖️ 이름] → 분배 모달 (÷ N명 divisor 입력)\n" +
-            "  · 분배됨: [💰 이름] → **지급 관리 UI** (사람별 개별 토글)\n" +
-            "     - 초록 = 지급됨 / 회색 = 미지급\n" +
-            "     - 클릭 즉시 저장 (자동 반영)\n" +
-            "     - 재클릭 시 이전 지급 상태 그대로 보임\n" +
-            "     - **[✅ 전체 지급] · [☐ 전체 취소] 일괄 토글 버튼** 추가\n" +
-            "• Discord 모든 액션 = EDIT (스팸 방지)";
+            "• **분배자 표기** — 누가 언제 분배했는지 카드/사이트에 표시 (raid_loots.distributed_by/at 컬럼)\n" +
+            "• **레이드 완료 후 24시간 미분배 알림** — DONE 후 1일 지나도 판매금 미입력 or 미분배인 loot 있으면 Discord 알림 1회 발송 (스팸 방지 flag)\n" +
+            "• **옵션 2 정책** — 카테고리별 최초 발송만 new, 이후는 기존 카드 편집:\n" +
+            "  · PARTY (파티 저장/자동배정): 첫 저장은 new, 이후 저장은 edit\n" +
+            "  · LOOT (득템 등록/판매금): 첫 등록은 new, 이후는 edit\n" +
+            "  · DIST (분배): 첫 분배는 new, 이후는 edit\n" +
+            "  · 지급(paid) 토글: 항상 edit\n" +
+            "  · syncRaidCardCategoryAware 로 통일";
 }

@@ -47,7 +47,7 @@ public class DiscordNotifier {
 
     private DiscordBotService bot() { return botProvider.getIfAvailable(); }
 
-    public enum RaidTrigger { CREATED, VOTE, ATTENDEES, PARTY, PRE30, STATUS, LOOT }
+    public enum RaidTrigger { CREATED, VOTE, ATTENDEES, PARTY, PRE30, STATUS, LOOT, DIST }
     public enum LootTrigger { DISTRIBUTED, PAID_CHANGED, PRICE_CHANGED }
 
     // ============================================================
@@ -97,6 +97,32 @@ public class DiscordNotifier {
     }
 
     /**
+     * 카테고리별 최초 발송만 new, 이후는 edit.
+     * · PARTY: raid.partyFreshSent flag 관리
+     * · LOOT: raid.lootFreshSent flag 관리
+     * · DIST: raid.distFreshSent flag 관리
+     * · 그 외: syncRaidCard 위임 (edit)
+     */
+    public void syncRaidCardCategoryAware(Long raidId, RaidTrigger trigger) {
+        try {
+            Raid r = raidRepository.findById(raidId).orElse(null);
+            if (r == null) return;
+            boolean firstOfCategory = false;
+            if (trigger == RaidTrigger.PARTY && !r.isPartyFreshSent()) {
+                r.setPartyFreshSent(true); raidRepository.save(r); firstOfCategory = true;
+            } else if (trigger == RaidTrigger.LOOT && !r.isLootFreshSent()) {
+                r.setLootFreshSent(true); raidRepository.save(r); firstOfCategory = true;
+            } else if (trigger == RaidTrigger.DIST && !r.isDistFreshSent()) {
+                r.setDistFreshSent(true); raidRepository.save(r); firstOfCategory = true;
+            }
+            if (firstOfCategory) syncRaidCardFresh(raidId, trigger);
+            else syncRaidCard(raidId, trigger);
+        } catch (Exception e) {
+            log.warn("syncRaidCardCategoryAware error: {}", e.toString());
+        }
+    }
+
+    /**
      * 항상 **새 메시지** 로 카드를 발송하고, discordMessageId 를 새 것으로 갱신.
      * 사용: 레이드 등록·파티편성·득템 입력·분배·지급·리마인더 등 '완료' 성격 이벤트.
      * 이후 minor 이벤트 (투표 등) 는 syncRaidCard 로 새 카드에 편집.
@@ -137,6 +163,7 @@ public class DiscordNotifier {
                     case ATTENDEES -> { title = "🎯 참가자 확정"; color = new Color(0x7C3AED); }
                     case PARTY -> { title = "🛡️ 파티 편성"; color = new Color(0x7C3AED); }
                     case LOOT -> { title = "💰 득템 등록"; color = new Color(0xFAAD14); }
+                    case DIST -> { title = "⚖️ 분배"; color = new Color(0x52C41A); }
                     case VOTE -> { title = "📢 레이드 안내"; color = new Color(0x00B0FF); }
                     default -> { title = "📢 레이드 안내"; color = new Color(0x00B0FF); }
                 }
@@ -294,6 +321,10 @@ public class DiscordNotifier {
     private void appendLootsToEmbed(EmbedBuilder eb, Long raidId) {
         List<RaidLoot> loots = lootRepository.findByRaidId(raidId);
         if (loots.isEmpty()) return;
+        // 분배자 nick 조회
+        Set<Long> distIds = new HashSet<>();
+        for (RaidLoot l : loots) if (l.getDistributedBy() != null) distIds.add(l.getDistributedBy());
+        Map<Long, String> distNickMap = fetchNicks(distIds);
         StringBuilder sb = new StringBuilder();
         for (RaidLoot l : loots) {
             sb.append("• ").append(l.getItemName());
@@ -303,7 +334,12 @@ public class DiscordNotifier {
                     long total = shareRepository.findByLootId(l.getId()).size();
                     long paid = shareRepository.findByLootId(l.getId()).stream()
                             .filter(LootShare::isPaid).count();
-                    if (total > 0) sb.append(" (정산 ").append(paid).append("/").append(total).append(")");
+                    if (total > 0) sb.append(" (지급 ").append(paid).append("/").append(total).append(")");
+                    if (l.getDistributedBy() != null && l.getDistributedAt() != null) {
+                        String nick = distNickMap.getOrDefault(l.getDistributedBy(), "#" + l.getDistributedBy());
+                        sb.append(" · 분배 ").append(nick)
+                                .append(" · ").append(l.getDistributedAt().format(FMT));
+                    }
                 }
             } else {
                 sb.append(" (노드랍)");
@@ -504,6 +540,20 @@ public class DiscordNotifier {
     // 하위 호환 (기존 호출부용 shim)
     public void notifyRaidCreated(Long raidId) { syncRaidCard(raidId, RaidTrigger.CREATED); }
     public void notifyRaidPre30(Long raidId) { syncRaidCard(raidId, RaidTrigger.PRE30); }
+
+    /** notify 채널에 텍스트 메시지 발송 (알림 등 별도 메시지용). */
+    public void postAlertMessage(String content) {
+        try {
+            DiscordBotService b = bot();
+            if (b == null || !b.isReady()) return;
+            TextChannel ch = b.notifyChannel();
+            if (ch == null || content == null || content.isBlank()) return;
+            String msg = content.length() > 1900 ? content.substring(0, 1897) + "..." : content;
+            ch.sendMessage(msg).queue(null, err -> log.debug("alert send failed: {}", err.toString()));
+        } catch (Exception e) {
+            log.debug("postAlertMessage error: {}", e.toString());
+        }
+    }
 
     // 30분 전 리마인더는 **새 메시지** 로 (알림 트리거를 위해)
     // 임베드는 레이드 카드와 동일 (참가/불참/미정 닉네임 · 파티 편성 · 득템 포함)

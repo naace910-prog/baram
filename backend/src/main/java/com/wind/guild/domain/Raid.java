@@ -41,6 +41,18 @@ public class Raid {
     @Column
     private boolean pre30Sent;
 
+    @Column(nullable = false)
+    private boolean partyFreshSent;
+
+    @Column(nullable = false)
+    private boolean lootFreshSent;
+
+    @Column(nullable = false)
+    private boolean distFreshSent;
+
+    @Column(nullable = false)
+    private boolean staleDistAlerted;
+
     @PrePersist
     void onCreate() {
         if (createdAt == null) createdAt = LocalDateTime.now();

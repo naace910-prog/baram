@@ -973,10 +973,12 @@ public class DiscordBotService extends ListenerAdapter {
                 e.getHook().sendMessage("서버 초기화 중").setEphemeral(true).queue();
                 return;
             }
-            ls.distribute(lootId, new java.util.ArrayList<>(memberIds), divisor);
+            var actorMember = memberRepository.findByDiscordUserId(e.getUser().getId()).orElse(null);
+            Long actorId = actorMember != null ? actorMember.getId() : null;
+            ls.distribute(lootId, new java.util.ArrayList<>(memberIds), divisor, actorId);
             DiscordNotifier n = notifier();
-            // 분배는 EDIT (스팸 방지)
-            if (n != null) n.syncRaidCard(loot.getRaidId(), DiscordNotifier.RaidTrigger.LOOT);
+            // 분배 = 카테고리별 최초 발송 new, 이후 edit
+            if (n != null) n.syncRaidCardCategoryAware(loot.getRaidId(), DiscordNotifier.RaidTrigger.DIST);
             long per = loot.getSoldPrice() / divisor;
             String extLabel = divisor > memberIds.size() ? " (외부 " + (divisor - memberIds.size()) + "명 포함)" : "";
             ChatService cs = chatService();
