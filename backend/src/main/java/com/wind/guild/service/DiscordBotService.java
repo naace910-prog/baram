@@ -569,6 +569,14 @@ public class DiscordBotService extends ListenerAdapter {
             handlePaidToggle(e, id);
             return;
         }
+        if (id.startsWith("loot:paidall:")) {
+            handlePaidBulk(e, id.substring("loot:paidall:".length()), true);
+            return;
+        }
+        if (id.startsWith("loot:paidnone:")) {
+            handlePaidBulk(e, id.substring("loot:paidnone:".length()), false);
+            return;
+        }
         if (id.startsWith("loot:paiddone:")) {
             long lootId;
             try { lootId = Long.parseLong(id.substring("loot:paiddone:".length())); }
@@ -578,6 +586,46 @@ public class DiscordBotService extends ListenerAdapter {
             if (loot != null && n != null) n.syncRaidCard(loot.getRaidId(), DiscordNotifier.RaidTrigger.LOOT);
             e.editMessage("닫힘").setComponents().queue();
             return;
+        }
+    }
+
+    private void handlePaidBulk(ButtonInteractionEvent e, String lootIdStr, boolean paid) {
+        long lootId;
+        try { lootId = Long.parseLong(lootIdStr); }
+        catch (Exception ex) { return; }
+        try {
+            if (!isMasterByDiscord(e.getUser().getId())) {
+                e.reply("문주/부문주만 지급 처리 가능합니다").setEphemeral(true).queue();
+                return;
+            }
+            LootService ls = lootServiceProvider.getIfAvailable();
+            var loot = lootRepository.findById(lootId).orElse(null);
+            if (ls == null || loot == null) { e.reply("데이터 없음").setEphemeral(true).queue(); return; }
+            var member = memberRepository.findByDiscordUserId(e.getUser().getId()).orElse(null);
+            Long actorId = member != null ? member.getId() : null;
+            var shares = shareRepository.findByLootId(lootId);
+            int changed = 0;
+            for (var s : shares) {
+                if (s.isPaid() != paid) {
+                    ls.markPaid(s.getId(), paid, actorId);
+                    changed++;
+                }
+            }
+            var refreshed = shareRepository.findByLootId(lootId);
+            List<LayoutComponent> rows = buildPaidToggleRows(loot, refreshed);
+            e.editComponents(rows.toArray(new LayoutComponent[0])).queue();
+            if (changed > 0) {
+                ChatService cs = chatService();
+                if (cs != null) {
+                    long total = refreshed.stream().mapToLong(com.wind.guild.domain.LootShare::getShare).sum();
+                    String action = paid ? "전체 지급" : "전체 취소";
+                    cs.saveSystem("💵 [Discord] " + loot.getItemName() + " " + action + " · " + changed + "명"
+                            + (paid ? " · 총 " + String.format("%,d", total) + "전" : ""));
+                }
+            }
+        } catch (Exception ex) {
+            log.warn("paid bulk failed: {}", ex.toString());
+            try { e.reply("에러: " + ex.getMessage()).setEphemeral(true).queue(); } catch (Exception ignore) {}
         }
     }
 
@@ -621,7 +669,9 @@ public class DiscordBotService extends ListenerAdapter {
         }
         long paid = shares.stream().filter(com.wind.guild.domain.LootShare::isPaid).count();
         rows.add(net.dv8tion.jda.api.interactions.components.ActionRow.of(
-                Button.primary("loot:paiddone:" + loot.getId(), "닫기 (" + paid + "/" + shares.size() + " 지급됨)")));
+                Button.success("loot:paidall:" + loot.getId(), "✅ 전체 지급"),
+                Button.danger("loot:paidnone:" + loot.getId(), "☐ 전체 취소"),
+                Button.primary("loot:paiddone:" + loot.getId(), "닫기 (" + paid + "/" + shares.size() + ")")));
         return rows;
     }
 

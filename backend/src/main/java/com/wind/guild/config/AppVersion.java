@@ -3,7 +3,7 @@ package com.wind.guild.config;
 public final class AppVersion {
     private AppVersion() {}
 
-    public static final String VERSION = "v1.0.27";
+    public static final String VERSION = "v1.0.28";
 
     public static final String CHANGELOG =
             "🔧 hotfix: 판매금 모달 TextInput.setValue('') 예외 (판매금 null 인 경우)\n" +
@@ -17,5 +17,6 @@ public final class AppVersion {
             "     - 초록 = 지급됨 / 회색 = 미지급\n" +
             "     - 클릭 즉시 저장 (자동 반영)\n" +
             "     - 재클릭 시 이전 지급 상태 그대로 보임\n" +
+            "     - **[✅ 전체 지급] · [☐ 전체 취소] 일괄 토글 버튼** 추가\n" +
             "• Discord 모든 액션 = EDIT (스팸 방지)";
 }
