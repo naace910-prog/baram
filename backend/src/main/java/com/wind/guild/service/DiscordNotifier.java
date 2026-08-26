@@ -113,13 +113,16 @@ public class DiscordNotifier {
         }
 
         List<RaidVote> votes = voteRepository.findByRaidId(r.getId());
-        long yes = votes.stream().filter(v -> v.getVote() == VoteType.YES).count();
-        long no = votes.stream().filter(v -> v.getVote() == VoteType.NO).count();
-        long maybe = votes.stream().filter(v -> v.getVote() == VoteType.MAYBE).count();
+        List<Long> yesIds = votes.stream().filter(v -> v.getVote() == VoteType.YES).map(RaidVote::getMemberId).toList();
+        List<Long> noIds = votes.stream().filter(v -> v.getVote() == VoteType.NO).map(RaidVote::getMemberId).toList();
+        List<Long> maybeIds = votes.stream().filter(v -> v.getVote() == VoteType.MAYBE).map(RaidVote::getMemberId).toList();
 
         List<Long> attendeeIds = attendeeRepository.findByRaidId(r.getId()).stream()
                 .map(RaidAttendee::getMemberId).toList();
-        Map<Long, String> nickMap = fetchNicks(attendeeIds);
+
+        Set<Long> refIds = new HashSet<>();
+        refIds.addAll(yesIds); refIds.addAll(noIds); refIds.addAll(maybeIds); refIds.addAll(attendeeIds);
+        Map<Long, String> nickMap = fetchNicks(refIds);
 
         RaidTarget t = r.getTarget();
         String label = t != null ? t.getName()
@@ -140,10 +143,15 @@ public class DiscordNotifier {
         EmbedBuilder eb = new EmbedBuilder()
                 .setTitle(title + " · " + label)
                 .setColor(color)
-                .setDescription(desc.toString())
-                .addField("✅ 참가", String.valueOf(yes), true)
-                .addField("❌ 불참", String.valueOf(no), true)
-                .addField("❓ 미정", String.valueOf(maybe), true);
+                .setDescription(desc.toString());
+
+        String yesNames = yesIds.isEmpty() ? "-" : yesIds.stream().map(id -> nickMap.getOrDefault(id, "#" + id)).collect(Collectors.joining(", "));
+        String noNames = noIds.isEmpty() ? "-" : noIds.stream().map(id -> nickMap.getOrDefault(id, "#" + id)).collect(Collectors.joining(", "));
+        String maybeNames = maybeIds.isEmpty() ? "-" : maybeIds.stream().map(id -> nickMap.getOrDefault(id, "#" + id)).collect(Collectors.joining(", "));
+
+        eb.addField("✅ 참가 (" + yesIds.size() + ")", truncate(yesNames, 1000), false);
+        eb.addField("❌ 불참 (" + noIds.size() + ")", truncate(noNames, 1000), false);
+        eb.addField("❓ 미정 (" + maybeIds.size() + ")", truncate(maybeNames, 1000), false);
 
         if (!attendeeIds.isEmpty()) {
             String names = attendeeIds.stream()
