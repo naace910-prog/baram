@@ -103,7 +103,7 @@ export default function StatsPage() {
         <Col xs={24} md={12} lg={5}>
           <Card>
             <Statistic
-              title="미정산 총액"
+              title="미정산 (총판매 - 지급완료)"
               value={overview?.unpaidTotal ?? 0}
               prefix={<WarningOutlined />}
               suffix="전"
@@ -156,7 +156,7 @@ export default function StatsPage() {
                 render: (name: string, r) => <Tag color="purple" style={{ margin: 0 }}>{r.icon ?? '🎯'} {name}</Tag>,
               },
               { title: '드랍', dataIndex: 'dropItemName', width: 140 },
-              { title: '킬 수', dataIndex: 'killCount', width: 80, align: 'right', render: fmt },
+              { title: '드랍 수', dataIndex: 'killCount', width: 80, align: 'right', render: fmt },
               { title: '총 판매금액', dataIndex: 'totalSoldPrice', width: 140, align: 'right', render: fmt },
               { title: '평균', dataIndex: 'avgSoldPrice', width: 120, align: 'right', render: fmt },
             ]}

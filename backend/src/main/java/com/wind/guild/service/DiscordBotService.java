@@ -815,7 +815,8 @@ public class DiscordBotService extends ListenerAdapter {
             }
             ls.distribute(lootId, new java.util.ArrayList<>(memberIds), divisor);
             DiscordNotifier n = notifier();
-            if (n != null) n.syncRaidCardFresh(loot.getRaidId(), DiscordNotifier.RaidTrigger.LOOT);
+            // 분배는 EDIT (스팸 방지)
+            if (n != null) n.syncRaidCard(loot.getRaidId(), DiscordNotifier.RaidTrigger.LOOT);
             long per = loot.getSoldPrice() / divisor;
             String extLabel = divisor > memberIds.size() ? " (외부 " + (divisor - memberIds.size()) + "명 포함)" : "";
             ChatService cs = chatService();

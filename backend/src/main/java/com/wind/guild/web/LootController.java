@@ -98,7 +98,8 @@ public class LootController {
                                              @Valid @RequestBody LootDto.DistributeRequest req) {
         lootService.distribute(lootId, req.memberIds(), req.divisor());
         discord.syncLootCard(lootId, DiscordNotifier.LootTrigger.DISTRIBUTED);
-        discord.syncRaidCardFresh(raidId, DiscordNotifier.RaidTrigger.LOOT);
+        // 분배는 EDIT (여러 드랍 분배 시 스팸 방지 · 최초 카드는 유지)
+        discord.syncRaidCard(raidId, DiscordNotifier.RaidTrigger.LOOT);
         try {
             var loot = lootRepo.findById(lootId).orElse(null);
             if (loot != null && loot.getSoldPrice() != null) {
@@ -137,7 +138,8 @@ public class LootController {
         Long actorId = (Long) session.getAttribute(SessionKeys.MEMBER_ID);
         lootService.markPaid(shareId, req.paid(), actorId);
         discord.syncLootCard(lootId, DiscordNotifier.LootTrigger.PAID_CHANGED);
-        discord.syncRaidCardFresh(raidId, DiscordNotifier.RaidTrigger.LOOT);
+        // 지급 토글은 사람별로 자주 발생 → EDIT (스팸 방지)
+        discord.syncRaidCard(raidId, DiscordNotifier.RaidTrigger.LOOT);
         if (req.paid()) {
             shareRepo.findById(shareId).ifPresent(s -> {
                 push.sendToMember(s.getMemberId(),

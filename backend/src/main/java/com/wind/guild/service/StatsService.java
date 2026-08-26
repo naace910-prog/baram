@@ -35,9 +35,11 @@ public class StatsService {
         long totalRevenue = loots.stream()
                 .filter(l -> l.getSoldPrice() != null)
                 .mapToLong(RaidLoot::getSoldPrice).sum();
-        long unpaidTotal = shares.stream()
-                .filter(s -> !s.isPaid())
+        long paidTotal = shares.stream()
+                .filter(LootShare::isPaid)
                 .mapToLong(LootShare::getShare).sum();
+        // 미정산 = 총 판매금 - 지급완료 (미등록 인원 몫도 자동 포함)
+        long unpaidTotal = Math.max(0, totalRevenue - paidTotal);
 
         StatsDto.Overview overview = new StatsDto.Overview(
                 members.size(), plannedRaids, doneRaids, totalRevenue, unpaidTotal);
@@ -64,31 +66,28 @@ public class StatsService {
         }
         memberStats.sort(Comparator.comparingLong(StatsDto.MemberStat::totalShare).reversed());
 
-        Map<Long, List<Raid>> raidsByTarget = new HashMap<>();
-        for (Raid r : raids) {
-            if (r.getTarget() == null) continue;   // 어금니 (target 없음) 은 target 별 통계에서 제외
-            raidsByTarget.computeIfAbsent(r.getTarget().getId(), k -> new ArrayList<>()).add(r);
+        // target 별 통계: **loot.targetId 기반** (어금니 raid 안의 흑룡/묵룡/감룡/진룡 개별 집계 포함)
+        Map<Long, List<RaidLoot>> lootsByTarget = new HashMap<>();
+        for (RaidLoot l : loots) {
+            if (l.getTargetId() == null) continue;
+            lootsByTarget.computeIfAbsent(l.getTargetId(), k -> new ArrayList<>()).add(l);
         }
-        Map<Long, List<RaidLoot>> lootsByRaid = new HashMap<>();
-        for (RaidLoot l : loots) lootsByRaid.computeIfAbsent(l.getRaidId(), k -> new ArrayList<>()).add(l);
-
         List<StatsDto.TargetStat> targetStats = new ArrayList<>();
         for (RaidTarget t : targets) {
-            List<Raid> tRaids = raidsByTarget.getOrDefault(t.getId(), List.of());
-            long kill = tRaids.stream().filter(r -> r.getStatus() == RaidStatus.DONE).count();
-            long total = 0, count = 0;
-            for (Raid r : tRaids) {
-                for (RaidLoot l : lootsByRaid.getOrDefault(r.getId(), List.of())) {
-                    if (l.getSoldPrice() != null) {
-                        total += l.getSoldPrice();
-                        count++;
-                    }
+            List<RaidLoot> tLoots = lootsByTarget.getOrDefault(t.getId(), List.of());
+            // 킬 카운트 = 이 target 의 loot 개수 (해골왕/어금니 모두 loot 1개 = 1마리 잡음)
+            long dropCount = tLoots.size();
+            long total = 0, priceCount = 0;
+            for (RaidLoot l : tLoots) {
+                if (l.getSoldPrice() != null) {
+                    total += l.getSoldPrice();
+                    priceCount++;
                 }
             }
-            long avg = count > 0 ? total / count : 0;
+            long avg = priceCount > 0 ? total / priceCount : 0;
             targetStats.add(new StatsDto.TargetStat(
                     t.getId(), t.getName(), t.getIcon(), t.getDropItemName(),
-                    kill, total, avg));
+                    dropCount, total, avg));
         }
         targetStats.sort(Comparator.comparingLong(StatsDto.TargetStat::totalSoldPrice).reversed());
 
