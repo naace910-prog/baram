@@ -503,6 +503,13 @@ function PartyCard({
     if (!byRole.has(e.role)) byRole.set(e.role, [])
     byRole.get(e.role)!.push(e)
   }
+  // unique 인원 수 (한 사람 여러 역할 시 1로 카운트) — memberId 또는 freeName 기준
+  const uniqueKeys = new Set<string>()
+  for (const e of entries) {
+    if (e.memberId != null) uniqueKeys.add('m:' + e.memberId)
+    else if (e.freeName) uniqueKeys.add('f:' + e.freeName)
+  }
+  const uniqueTotal = uniqueKeys.size
 
   return (
     <Card
@@ -540,6 +547,9 @@ function PartyCard({
             onAddFree={() => onAddFree(r.name)}
           />
         ))}
+      </div>
+      <div style={{ marginTop: 8, textAlign: 'right', color: '#8c8c8c', fontSize: 12 }}>
+        총원 {uniqueTotal}명
       </div>
     </Card>
   )

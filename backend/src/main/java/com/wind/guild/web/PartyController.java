@@ -36,12 +36,20 @@ public class PartyController {
                     .append(raid.getTarget().getIcon() != null ? raid.getTarget().getIcon() + " " : "")
                     .append(raid.getTarget().getName()).append(" · ")
                     .append(raid.getScheduledAt().format(DateTimeFormatter.ofPattern("MM/dd HH:mm")));
+            java.util.Set<String> uniqueAll = new java.util.HashSet<>();
             for (var p : parties) {
                 sb.append("\n• ").append(p.channelType() == ChannelType.MAIN ? "본대" : "침략");
                 if (p.channelNumber() != null) sb.append(" 채널 ").append(p.channelNumber());
                 if (p.memo() != null && !p.memo().isBlank()) sb.append(" · ").append(p.memo());
-                // '(N명)' 슬롯 카운트 제거 — 한 사람 여러 역할 시 부풀려짐
+                java.util.Set<String> uniqueP = new java.util.HashSet<>();
+                for (var m : p.members()) {
+                    if (m.memberId() != null) uniqueP.add("m:" + m.memberId());
+                    else if (m.freeName() != null && !m.freeName().isBlank()) uniqueP.add("f:" + m.freeName());
+                }
+                uniqueAll.addAll(uniqueP);
+                sb.append(" (").append(uniqueP.size()).append("명)");
             }
+            sb.append("\n총원: ").append(uniqueAll.size()).append("명");
             chat.saveSystem(sb.toString());
         } catch (Exception ignored) {}
     }

@@ -120,8 +120,21 @@ public class DiscordNotifier {
         List<Long> attendeeIds = attendeeRepository.findByRaidId(r.getId()).stream()
                 .map(RaidAttendee::getMemberId).toList();
 
+        // 파티 참가자 memberId 도 nick 조회 대상에 포함
+        List<RaidParty> parties = partyRepository.findByRaidIdOrderByDisplayOrderAsc(r.getId());
+        Map<Long, List<RaidPartyMember>> partyMembersMap = new HashMap<>();
+        for (RaidParty p : parties) {
+            partyMembersMap.put(p.getId(), partyMemberRepository.findByPartyIdOrderByRoleAscDisplayOrderAsc(p.getId()));
+        }
+
         Set<Long> refIds = new HashSet<>();
         refIds.addAll(yesIds); refIds.addAll(noIds); refIds.addAll(maybeIds); refIds.addAll(attendeeIds);
+        for (RaidParty p : parties) {
+            if (p.getMikeMemberId() != null) refIds.add(p.getMikeMemberId());
+            for (RaidPartyMember m : partyMembersMap.get(p.getId())) {
+                if (m.getMemberId() != null) refIds.add(m.getMemberId());
+            }
+        }
         Map<Long, String> nickMap = fetchNicks(refIds);
 
         RaidTarget t = r.getTarget();
@@ -153,7 +166,16 @@ public class DiscordNotifier {
         eb.addField("❌ 불참 (" + noIds.size() + ")", truncate(noNames, 1000), false);
         eb.addField("❓ 미정 (" + maybeIds.size() + ")", truncate(maybeNames, 1000), false);
 
-        if (!attendeeIds.isEmpty()) {
+        // 참가확정: 파티가 있으면 파티 참가자 unique (external 포함, 중복 역할 (N) 표기)
+        //           파티가 없으면 raid_attendees 로 fallback
+        LinkedHashMap<String, Integer> partyPeople = collectPartyParticipants(parties, partyMembersMap, nickMap);
+        if (!partyPeople.isEmpty()) {
+            String names = partyPeople.entrySet().stream()
+                    .map(e -> e.getValue() > 1 ? e.getKey() + " (" + e.getValue() + ")" : e.getKey())
+                    .collect(Collectors.joining(", "));
+            eb.addField("🎯 참가확정 " + partyPeople.size() + "명",
+                    truncate(names, 1000), false);
+        } else if (!attendeeIds.isEmpty()) {
             String names = attendeeIds.stream()
                     .map(id -> nickMap.getOrDefault(id, "#" + id))
                     .collect(Collectors.joining(", "));
@@ -161,7 +183,7 @@ public class DiscordNotifier {
                     truncate(names, 1000), false);
         }
 
-        appendPartiesToEmbed(eb, r.getId());
+        appendPartiesToEmbedShared(eb, parties, partyMembersMap, nickMap);
         appendLootsToEmbed(eb, r.getId());
 
         String siteLink = props.getSiteBaseUrl() + "/raids/" + r.getId();
@@ -169,19 +191,37 @@ public class DiscordNotifier {
         return eb.build();
     }
 
-    private void appendPartiesToEmbed(EmbedBuilder eb, Long raidId) {
-        List<RaidParty> parties = partyRepository.findByRaidIdOrderByDisplayOrderAsc(raidId);
-        if (parties.isEmpty()) return;
-
-        Set<Long> refIds = new HashSet<>();
-        Map<Long, List<RaidPartyMember>> membersByParty = new HashMap<>();
+    /**
+     * 파티들의 참가자를 unique 하게 집계 (memberId 또는 freeName 기준).
+     * key = 표시명, value = 등장 횟수 (여러 역할/파티에 걸침).
+     */
+    private LinkedHashMap<String, Integer> collectPartyParticipants(
+            List<RaidParty> parties,
+            Map<Long, List<RaidPartyMember>> partyMembersMap,
+            Map<Long, String> nickMap) {
+        LinkedHashMap<String, Integer> counts = new LinkedHashMap<>();
         for (RaidParty p : parties) {
-            List<RaidPartyMember> ms = partyMemberRepository.findByPartyIdOrderByRoleAscDisplayOrderAsc(p.getId());
-            membersByParty.put(p.getId(), ms);
-            if (p.getMikeMemberId() != null) refIds.add(p.getMikeMemberId());
-            ms.forEach(m -> { if (m.getMemberId() != null) refIds.add(m.getMemberId()); });
+            for (RaidPartyMember m : partyMembersMap.get(p.getId())) {
+                String name;
+                if (m.getMemberId() != null) {
+                    name = nickMap.getOrDefault(m.getMemberId(), "#" + m.getMemberId());
+                } else if (m.getFreeName() != null && !m.getFreeName().isBlank()) {
+                    name = m.getFreeName();
+                } else {
+                    continue;
+                }
+                counts.merge(name, 1, Integer::sum);
+            }
         }
-        Map<Long, String> nickMap = fetchNicks(refIds);
+        return counts;
+    }
+
+    private void appendPartiesToEmbedShared(
+            EmbedBuilder eb,
+            List<RaidParty> parties,
+            Map<Long, List<RaidPartyMember>> membersByParty,
+            Map<Long, String> nickMap) {
+        if (parties.isEmpty()) return;
 
         for (RaidParty p : parties) {
             List<RaidPartyMember> ms = membersByParty.get(p.getId());
@@ -196,20 +236,26 @@ public class DiscordNotifier {
             body.append("🎤 마이크: ").append(mike).append("\n");
 
             Map<String, List<String>> byRole = new LinkedHashMap<>();
+            Set<String> uniqueParticipants = new HashSet<>();
             for (RaidPartyMember m : ms) {
-                String name = m.getMemberId() != null
-                        ? nickMap.getOrDefault(m.getMemberId(), "#" + m.getMemberId())
-                        : m.getFreeName();
+                String name;
+                if (m.getMemberId() != null) {
+                    name = nickMap.getOrDefault(m.getMemberId(), "#" + m.getMemberId());
+                    uniqueParticipants.add("m:" + m.getMemberId());
+                } else if (m.getFreeName() != null && !m.getFreeName().isBlank()) {
+                    name = m.getFreeName();
+                    uniqueParticipants.add("f:" + m.getFreeName());
+                } else {
+                    continue;
+                }
                 byRole.computeIfAbsent(m.getRole(), k -> new ArrayList<>()).add(name);
             }
             for (var e : byRole.entrySet()) {
                 body.append("• ").append(e.getKey()).append(" (").append(e.getValue().size()).append("): ")
                         .append(String.join(", ", e.getValue())).append("\n");
             }
-            // '총원 N명' 제거 — 한 사람이 여러 역할 담당 시 슬롯 카운트라 부풀려짐
-            if (body.length() > 0 && body.charAt(body.length() - 1) == '\n') {
-                body.deleteCharAt(body.length() - 1);
-            }
+            // 총원 = unique 인원 수 (한 사람 여러 역할 시 1로 카운트)
+            body.append("총원 ").append(uniqueParticipants.size()).append("명");
             eb.addField(head, truncate(body.toString(), 1000), false);
         }
     }
