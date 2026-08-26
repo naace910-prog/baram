@@ -193,10 +193,18 @@ public class DiscordBotService extends ListenerAdapter {
 
         StringBuilder sb = new StringBuilder("📊 **최근 완료 레이드** ").append(done.size()).append("건\n\n");
         for (var r : done) {
-            String label = r.getTarget() != null ? r.getTarget().getName()
-                    : (r.getCategory() == RaidCategory.FANG ? "🐲 어금니 레이드" : "레이드");
+            String label;
+            if (r.getTarget() != null) {
+                label = (r.getTarget().getIcon() != null ? r.getTarget().getIcon() + " " : "") + r.getTarget().getName();
+            } else if (r.getCategory() == RaidCategory.FANG) {
+                label = "🐲 어금니 레이드";
+            } else if (r.getCategory() == RaidCategory.SKULL_KING) {
+                label = "💀 해골왕 레이드";
+            } else {
+                label = "레이드";
+            }
             sb.append("── ").append(label).append(" · ")
-                    .append(r.getScheduledAt().format(DateTimeFormatter.ofPattern("MM/dd(E) HH:mm")))
+                    .append(r.getScheduledAt().format(DateTimeFormatter.ofPattern("MM/dd(E) HH:mm", java.util.Locale.KOREAN)))
                     .append(" ──\n");
 
             var attendees = attendeeRepository.findByRaidId(r.getId()).stream()
@@ -381,10 +389,18 @@ public class DiscordBotService extends ListenerAdapter {
         StringBuilder sb = new StringBuilder();
         sb.append("🎯 **예정 레이드** ").append(planned.size()).append("건\n\n");
         for (var v : planned) {
-            String label = v.targetName() != null ? v.targetName()
-                    : (v.category() == RaidCategory.FANG ? "🐲 어금니 레이드" : "레이드");
+            String label;
+            if (v.targetName() != null) {
+                label = (v.targetIcon() != null ? v.targetIcon() + " " : "") + v.targetName();
+            } else if (v.category() == RaidCategory.FANG) {
+                label = "🐲 어금니 레이드";
+            } else if (v.category() == RaidCategory.SKULL_KING) {
+                label = "💀 해골왕 레이드";
+            } else {
+                label = "레이드";
+            }
             sb.append("── ").append(label).append(" · ")
-                    .append(v.scheduledAt().format(DateTimeFormatter.ofPattern("MM/dd(E) HH:mm")))
+                    .append(v.scheduledAt().format(DateTimeFormatter.ofPattern("MM/dd(E) HH:mm", java.util.Locale.KOREAN)))
                     .append("\n");
 
             var yes = v.votes().stream().filter(x -> x.vote() == VoteType.YES).map(RaidDto.VoteView::nickname).toList();

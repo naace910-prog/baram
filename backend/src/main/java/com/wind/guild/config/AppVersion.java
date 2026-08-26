@@ -3,13 +3,10 @@ package com.wind.guild.config;
 public final class AppVersion {
     private AppVersion() {}
 
-    public static final String VERSION = "v1.0.14";
+    public static final String VERSION = "v1.0.15";
 
     public static final String CHANGELOG =
-            "• 레이드 등록 시간 1분 단위 조정\n" +
-            "• 분배금 지급 처리 (문주 스위치 · 지급자 · 지급시각 기록)\n" +
-            "• 파티 자동배정 (직전 같은 대상 파티 승계, 현재 참가자만)\n" +
-            "• 문주 중 '중요별표' 표시 + 채팅/디스코드 ⭐ 렌더\n" +
-            "• `/도움말` 슬래시 커맨드 신설 — 전 기능 안내\n" +
-            "• 서버 기동 알림에 변경사항 포함";
+            "• 투표 알림 · 레이드목록 · 카드에 대상 없을 때 카테고리 이름 fallback (기존 'null' / '레이드' 버그)\n" +
+            "• 요일 한글 표기 (Wed → 수) — 백엔드 DateTimeFormatter Locale.KOREAN + 프론트 dayjs.locale('ko')\n" +
+            "• 카테고리 표시 시 아이콘(💀/🐲) 포함";
 }

@@ -4,8 +4,11 @@ import { BrowserRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ConfigProvider, App as AntApp, theme } from 'antd'
 import koKR from 'antd/locale/ko_KR'
+import dayjs from 'dayjs'
 import 'dayjs/locale/ko'
 import App from '@/App'
+
+dayjs.locale('ko')
 import '@/styles/global.css'
 
 const queryClient = new QueryClient({

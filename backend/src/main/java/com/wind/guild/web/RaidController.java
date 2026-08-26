@@ -97,7 +97,11 @@ public class RaidController {
                 case MAYBE -> "❓ 미정";
             };
             var raid = raidService.get(raidId);
-            chat.saveSystem("🗳️ " + nick + " " + label + " · " + raid.targetName());
+            String raidLabel = raid.targetName() != null ? raid.targetName()
+                    : (raid.category() != null
+                        ? (raid.category().name().equals("FANG") ? "🐲 어금니 레이드" : "💀 해골왕 레이드")
+                        : "레이드");
+            chat.saveSystem("🗳️ " + nick + " " + label + " · " + raidLabel);
         } catch (Exception ignored) {}
         return raidService.get(raidId);
     }
