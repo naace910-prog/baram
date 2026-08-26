@@ -345,12 +345,12 @@ public class DiscordNotifier {
                 String shortName = l.getItemName();
                 if (shortName.length() > 10) shortName = shortName.substring(0, 10);
                 boolean hasShares = !shareRepository.findByLootId(l.getId()).isEmpty();
-                if (hasShares) {
-                    // 이미 분배됨: 정보만, disabled
-                    lootBtns.add(Button.secondary("loot:done:" + l.getId(), "✅ " + shortName).asDisabled());
-                } else if (l.getSoldPrice() == null || l.getSoldPrice() <= 0) {
+                if (l.getSoldPrice() == null || l.getSoldPrice() <= 0) {
                     // 판매금 없음
                     lootBtns.add(Button.primary("loot:price:" + l.getId(), "💵 " + shortName));
+                } else if (hasShares) {
+                    // 이미 분배됨: 재분배 가능 (기존 선택자 pre-selected)
+                    lootBtns.add(Button.secondary("loot:distribute:" + l.getId(), "🔄 " + shortName));
                 } else {
                     // 판매금 있음, 미분배
                     lootBtns.add(Button.success("loot:distribute:" + l.getId(), "⚖️ " + shortName));

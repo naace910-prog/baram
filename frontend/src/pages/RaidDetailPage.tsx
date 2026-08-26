@@ -251,10 +251,13 @@ export default function RaidDetailPage() {
                   <Button
                     size="small" type="primary"
                     disabled={l.soldPrice == null || l.soldPrice <= 0}
-                    onClick={() => setDistModal({
-                      open: true, loot: l,
-                      picked: l.shares.length > 0 ? l.shares.map(s => s.memberId) : raid.votes.filter(v => v.vote === 'YES').map(v => v.memberId),
-                    })}
+                    onClick={() => {
+                      // 항상 최신 YES 투표자 기준. 이미 분배된 경우도 기존 명단 + 새 YES 투표자 union.
+                      const yesVoters = raid.votes.filter(v => v.vote === 'YES').map(v => v.memberId)
+                      const existing = l.shares.map(s => s.memberId)
+                      const picked = Array.from(new Set([...existing, ...yesVoters]))
+                      setDistModal({ open: true, loot: l, picked })
+                    }}
                   >
                     분배
                   </Button>

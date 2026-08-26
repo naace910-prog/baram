@@ -17,6 +17,8 @@ import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.ModalInteractionEvent;
+import net.dv8tion.jda.api.interactions.components.LayoutComponent;
+import net.dv8tion.jda.api.interactions.components.buttons.Button;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.dv8tion.jda.api.interactions.commands.OptionType;
@@ -50,10 +52,14 @@ public class DiscordBotService extends ListenerAdapter {
     private final com.wind.guild.repository.LootShareRepository shareRepository;
     private final com.wind.guild.repository.RaidPartyRepository partyRepositoryLazy;
     private final com.wind.guild.repository.RaidPartyMemberRepository partyMemberRepositoryLazy;
+    private final com.wind.guild.repository.RaidVoteRepository voteRepositoryLazy;
     private final RaidService raidService;
     private final ObjectProvider<DiscordNotifier> notifierProvider;
     private final ObjectProvider<ChatService> chatServiceProvider;
     private final ObjectProvider<LootService> lootServiceProvider;
+
+    // 분배 대상 선택 상태 (in-memory · lootId → 선택된 memberId 집합)
+    private final java.util.Map<Long, java.util.LinkedHashSet<Long>> distributeSelection = new java.util.concurrent.ConcurrentHashMap<>();
 
     private JDA jda;
 
@@ -534,40 +540,147 @@ public class DiscordBotService extends ListenerAdapter {
                 e.reply("판매금액이 없어 분배할 수 없습니다. 먼저 판매금 입력하세요.").setEphemeral(true).queue();
                 return;
             }
-            // 파티 편성된 memberId 자동 산정
-            int autoDivisor = countPartyMembersUnique(loot.getRaidId());
-            String defaultDiv = autoDivisor > 0 ? String.valueOf(autoDivisor) : "";
-            TextInput div = TextInput.create("divisor", "분배 인원수 (÷ N명)", TextInputStyle.SHORT)
-                    .setPlaceholder("파티 편성 " + autoDivisor + "명 · 미등록 포함 시 늘리세요")
-                    .setRequired(true).setMinLength(1).setMaxLength(3)
-                    .setValue(defaultDiv)
-                    .build();
-            Modal modal = Modal.create("loot:distmodal:" + lootId,
-                            "⚖️ " + loot.getItemName() + " · " + String.format("%,d", loot.getSoldPrice()) + "전 분배")
-                    .addComponents(net.dv8tion.jda.api.interactions.components.ActionRow.of(div))
-                    .build();
-            e.replyModal(modal).queue();
+            replyDistributeButtons(e, loot);
+            return;
+        }
+        if (id.startsWith("loot:distbtn:")) {
+            handleDistributeToggle(e, id);
+            return;
+        }
+        if (id.startsWith("loot:distconfirm:")) {
+            handleDistributeConfirm(e, id);
+            return;
+        }
+        if (id.startsWith("loot:distcancel:")) {
+            long lootId;
+            try { lootId = Long.parseLong(id.substring("loot:distcancel:".length())); }
+            catch (Exception ex) { return; }
+            distributeSelection.remove(lootId);
+            e.editMessage("취소됨").setComponents().queue();
             return;
         }
     }
 
-    /** 파티에 편성된 등록 문파원 unique 수 (freeName 제외 — 시스템 분배 대상만). */
-    private int countPartyMembersUnique(Long raidId) {
+    private void replyDistributeButtons(ButtonInteractionEvent e, com.wind.guild.domain.RaidLoot loot) {
+        // 초기 선택 = 기존 분배 있으면 그 명단, 없으면 최신 YES 투표자
+        var existing = shareRepository.findByLootId(loot.getId());
+        java.util.LinkedHashSet<Long> initial;
+        if (!existing.isEmpty()) {
+            initial = new java.util.LinkedHashSet<>();
+            for (var s : existing) initial.add(s.getMemberId());
+        } else {
+            initial = yesVoterIds(loot.getRaidId());
+        }
+        distributeSelection.put(loot.getId(), initial);
+        List<LayoutComponent> rows = buildDistributeButtonRows(loot);
+        String header = "⚖️ **" + loot.getItemName() + "** · " + String.format("%,d", loot.getSoldPrice()) + "전\n"
+                + "분배할 문파원 클릭 (초록=선택 / 회색=제외)"
+                + (existing.isEmpty() ? "" : "\n⚠️ 이미 분배됨 (재분배 시 기존 정산 기록 초기화)");
+        e.reply(header)
+                .setEphemeral(true)
+                .setComponents(rows.toArray(new LayoutComponent[0]))
+                .queue();
+    }
+
+    private List<LayoutComponent> buildDistributeButtonRows(com.wind.guild.domain.RaidLoot loot) {
+        var selected = distributeSelection.getOrDefault(loot.getId(), new java.util.LinkedHashSet<>());
+        var members = memberRepository.findAllByActiveTrueOrderByNicknameAsc();
+        int MAX_MEMBER_BUTTONS = 20; // 4 rows × 5 = 20 · 마지막 행 = 확정/취소
+        List<Button> btns = new java.util.ArrayList<>();
+        for (var m : members) {
+            if (btns.size() >= MAX_MEMBER_BUTTONS) break;
+            boolean picked = selected.contains(m.getId());
+            String label = (picked ? "✅ " : "☐ ") + m.getNickname();
+            if (label.length() > 25) label = label.substring(0, 25);
+            String cid = "loot:distbtn:" + loot.getId() + ":" + m.getId();
+            btns.add(picked
+                    ? Button.success(cid, label)
+                    : Button.secondary(cid, label));
+        }
+        List<LayoutComponent> rows = new java.util.ArrayList<>();
+        for (int i = 0; i < btns.size(); i += 5) {
+            rows.add(net.dv8tion.jda.api.interactions.components.ActionRow.of(
+                    btns.subList(i, Math.min(i + 5, btns.size()))));
+        }
+        // 마지막 확정/취소 행
+        rows.add(net.dv8tion.jda.api.interactions.components.ActionRow.of(
+                Button.primary("loot:distconfirm:" + loot.getId(),
+                        "⚖️ " + selected.size() + "명 분배 확인"),
+                Button.danger("loot:distcancel:" + loot.getId(), "취소")
+        ));
+        return rows;
+    }
+
+    private void handleDistributeToggle(ButtonInteractionEvent e, String id) {
+        String[] parts = id.split(":");
+        Long lootId, memberId;
         try {
-            var parties = partyRepositoryHolder();
-            if (parties == null) return 0;
-            java.util.Set<Long> unique = new java.util.HashSet<>();
-            for (var p : parties.findByRaidIdOrderByDisplayOrderAsc(raidId)) {
-                if (p.getMikeMemberId() != null) unique.add(p.getMikeMemberId());
-                for (var m : partyMemberRepositoryHolder().findByPartyIdOrderByRoleAscDisplayOrderAsc(p.getId())) {
-                    if (m.getMemberId() != null) unique.add(m.getMemberId());
-                }
+            lootId = Long.parseLong(parts[2]);
+            memberId = Long.parseLong(parts[3]);
+        } catch (Exception ex) { return; }
+        var loot = lootRepository.findById(lootId).orElse(null);
+        if (loot == null) return;
+        var set = distributeSelection.computeIfAbsent(lootId, k -> new java.util.LinkedHashSet<>());
+        if (!set.remove(memberId)) set.add(memberId);
+        List<LayoutComponent> rows = buildDistributeButtonRows(loot);
+        e.editComponents(rows.toArray(new LayoutComponent[0])).queue();
+    }
+
+    private void handleDistributeConfirm(ButtonInteractionEvent e, String id) {
+        long lootId;
+        try { lootId = Long.parseLong(id.substring("loot:distconfirm:".length())); }
+        catch (Exception ex) { return; }
+        e.deferEdit().queue();
+        try {
+            if (!isMasterByDiscord(e.getUser().getId())) {
+                e.getHook().editOriginal("문주/부문주만 분배 가능합니다").setComponents().queue();
+                return;
             }
-            return unique.size();
+            var loot = lootRepository.findById(lootId).orElse(null);
+            if (loot == null) {
+                e.getHook().editOriginal("득템 없음").setComponents().queue();
+                return;
+            }
+            var selected = distributeSelection.getOrDefault(lootId, new java.util.LinkedHashSet<>());
+            if (selected.isEmpty()) {
+                e.getHook().editOriginal("최소 1명 이상 선택하세요").queue();
+                return;
+            }
+            LootService ls = lootServiceProvider.getIfAvailable();
+            if (ls == null) {
+                e.getHook().editOriginal("서버 초기화 중").setComponents().queue();
+                return;
+            }
+            ls.distribute(lootId, new java.util.ArrayList<>(selected), selected.size());
+            distributeSelection.remove(lootId);
+            DiscordNotifier n = notifier();
+            if (n != null) n.syncRaidCard(loot.getRaidId(), DiscordNotifier.RaidTrigger.LOOT);
+            ChatService cs = chatService();
+            long per = loot.getSoldPrice() / selected.size();
+            if (cs != null) cs.saveSystem("⚖️ [Discord] " + loot.getItemName() + " " + String.format("%,d", loot.getSoldPrice())
+                    + "전 · " + selected.size() + "명 · 1인 " + String.format("%,d", per) + "전");
+            e.getHook().editOriginal("✅ 분배 완료 · " + selected.size() + "명 · 1인 " + String.format("%,d", per) + "전")
+                    .setComponents().queue();
+        } catch (Exception ex) {
+            log.warn("distribute confirm failed: {}", ex.toString());
+            try { e.getHook().editOriginal("에러: " + ex.getMessage()).setComponents().queue(); } catch (Exception ignore) {}
+        }
+    }
+
+    /** 최신 YES 투표자 unique memberId 수 (실제 참가 = 분배 대상). */
+    private int countYesVotersUnique(Long raidId) {
+        try {
+            return yesVoterIds(raidId).size();
         } catch (Exception ex) { return 0; }
     }
-    private com.wind.guild.repository.RaidPartyRepository partyRepositoryHolder() { return partyRepositoryLazy; }
-    private com.wind.guild.repository.RaidPartyMemberRepository partyMemberRepositoryHolder() { return partyMemberRepositoryLazy; }
+    /** 최신 YES 투표자 unique memberId 리스트. */
+    private java.util.LinkedHashSet<Long> yesVoterIds(Long raidId) {
+        java.util.LinkedHashSet<Long> ids = new java.util.LinkedHashSet<>();
+        for (var v : voteRepositoryLazy.findByRaidId(raidId)) {
+            if (v.getVote() == com.wind.guild.domain.VoteType.YES) ids.add(v.getMemberId());
+        }
+        return ids;
+    }
 
     @Override
     public void onModalInteraction(ModalInteractionEvent e) {
@@ -618,7 +731,8 @@ public class DiscordBotService extends ListenerAdapter {
             var entry = new com.wind.guild.web.dto.LootDto.BulkDropEntry(targetId, quantity, unitPrice);
             ls.bulkAdd(raidId, new com.wind.guild.web.dto.LootDto.BulkAddRequest(java.util.List.of(entry)));
             DiscordNotifier n = notifier();
-            if (n != null) n.syncRaidCardFresh(raidId, DiscordNotifier.RaidTrigger.LOOT);
+            // Discord 모달 액션은 모두 EDIT 로 통일 (스팸 방지)
+            if (n != null) n.syncRaidCard(raidId, DiscordNotifier.RaidTrigger.LOOT);
             ChatService cs = chatService();
             if (cs != null) {
                 RaidTarget t = targetRepository.findById(targetId).orElse(null);
@@ -759,10 +873,24 @@ public class DiscordBotService extends ListenerAdapter {
             ls.upsert(loot.getRaidId(), lootId, new com.wind.guild.web.dto.LootDto.UpsertLootRequest(
                     loot.getTargetId(), loot.getItemName(), true, price, loot.getMemo()));
             DiscordNotifier n = notifier();
-            if (n != null) n.syncRaidCardFresh(loot.getRaidId(), DiscordNotifier.RaidTrigger.LOOT);
+            if (n != null) n.syncRaidCard(loot.getRaidId(), DiscordNotifier.RaidTrigger.LOOT);
             ChatService cs = chatService();
             if (cs != null) cs.saveSystem("💵 [Discord] " + loot.getItemName() + " 판매금 " + String.format("%,d", price) + "전");
-            e.getHook().sendMessage("✅ 판매금 등록 완료 · " + String.format("%,d", price) + "전 · 이제 [⚖️ 분배] 버튼으로 진행").setEphemeral(true).queue();
+
+            // 판매금 저장 후 자동으로 분배 대상 선택 UI 이어서 표시
+            var loot2 = lootRepository.findById(lootId).orElse(null);
+            if (loot2 != null) {
+                distributeSelection.put(lootId, yesVoterIds(loot2.getRaidId()));
+                List<LayoutComponent> rows = buildDistributeButtonRows(loot2);
+                String header = "✅ 판매금 " + String.format("%,d", price) + "전 저장\n\n"
+                        + "⚖️ 이어서 **" + loot2.getItemName() + "** 분배할 문파원 클릭 (초록=선택 / 회색=제외)";
+                e.getHook().sendMessage(header)
+                        .setEphemeral(true)
+                        .setComponents(rows.toArray(new LayoutComponent[0]))
+                        .queue();
+            } else {
+                e.getHook().sendMessage("✅ 판매금 " + String.format("%,d", price) + "전 저장").setEphemeral(true).queue();
+            }
         } catch (Exception ex) {
             log.warn("price modal failed: {}", ex.toString());
             try { e.getHook().sendMessage("에러: " + ex.getMessage()).setEphemeral(true).queue(); } catch (Exception ignore) {}
