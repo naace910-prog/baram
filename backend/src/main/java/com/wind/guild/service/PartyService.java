@@ -124,9 +124,31 @@ public class PartyService {
                     .displayOrder(ord)
                     .build());
         }
+        // 파티에 넣은 등록 문파원은 자동으로 YES 투표 upsert
+        autoYesVoteForPartyMembers(p.getRaidId(), req.members());
         syncAttendeesFromParties(p.getRaidId());
         return listByRaid(p.getRaidId()).stream()
                 .filter(v -> v.id().equals(partyId)).findFirst().orElseThrow();
+    }
+
+    private void autoYesVoteForPartyMembers(Long raidId, List<PartyDto.MemberEntry> members) {
+        for (PartyDto.MemberEntry e : members) {
+            if (e.memberId() == null) continue;
+            var existing = voteRepo.findByRaidIdAndMemberId(raidId, e.memberId());
+            if (existing.isPresent()) {
+                var v = existing.get();
+                if (v.getVote() != VoteType.YES) {
+                    v.setVote(VoteType.YES);
+                    voteRepo.save(v);
+                }
+            } else {
+                voteRepo.save(RaidVote.builder()
+                        .raidId(raidId)
+                        .memberId(e.memberId())
+                        .vote(VoteType.YES)
+                        .build());
+            }
+        }
     }
 
     public PartyDto.AutoAssignResult autoAssignFromPrevious(Long raidId) {

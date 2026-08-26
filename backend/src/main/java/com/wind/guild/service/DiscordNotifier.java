@@ -126,10 +126,10 @@ public class DiscordNotifier {
                 var buttons = buildRaidButtons(r, d);
                 var buttonsArr = buttons.toArray(new net.dv8tion.jda.api.interactions.components.LayoutComponent[0]);
 
+                Long targetRaidId = r.getId();
                 if (r.getDiscordMessageId() == null) {
                     ch.sendMessageEmbeds(embed).setComponents(buttonsArr).queue(msg -> {
-                        r.setDiscordMessageId(msg.getIdLong());
-                        raidRepository.save(r);
+                        raidRepository.updateDiscordMessageId(targetRaidId, msg.getIdLong());
                     }, err -> log.warn("raid card send failed: {}", err.toString()));
                 } else {
                     ch.editMessageEmbedsById(r.getDiscordMessageId(), embed)
@@ -137,8 +137,7 @@ public class DiscordNotifier {
                             .queue(null, err -> {
                                 log.warn("raid card edit failed (fallback to new send): {}", err.toString());
                                 ch.sendMessageEmbeds(embed).setComponents(buttonsArr).queue(m -> {
-                                    r.setDiscordMessageId(m.getIdLong());
-                                    raidRepository.save(r);
+                                    raidRepository.updateDiscordMessageId(targetRaidId, m.getIdLong());
                                 });
                             });
                 }
@@ -203,9 +202,9 @@ public class DiscordNotifier {
             MessageEmbed embed = buildRaidEmbed(r, trigger, d);
             var buttons = buildRaidButtons(r, d);
             var buttonsArr = buttons.toArray(new net.dv8tion.jda.api.interactions.components.LayoutComponent[0]);
+            Long raidId2 = r.getId();
             ch.sendMessageEmbeds(embed).setComponents(buttonsArr).queue(msg -> {
-                r.setDiscordMessageId(msg.getIdLong());
-                raidRepository.save(r);
+                raidRepository.updateDiscordMessageId(raidId2, msg.getIdLong());
             }, err -> log.warn("raid card fresh send failed: {}", err.toString()));
         } catch (Exception e) {
             log.warn("syncRaidCardFresh error: {}", e.toString());
@@ -474,9 +473,9 @@ public class DiscordNotifier {
             MessageEmbed embed = buildLootEmbed(l, shares);
 
             if (l.getDiscordMessageId() == null) {
+                final Long lootIdF = lootId;
                 ch.sendMessageEmbeds(embed).queue(msg -> {
-                    l.setDiscordMessageId(msg.getIdLong());
-                    lootRepository.save(l);
+                    lootRepository.updateDiscordMessageId(lootIdF, msg.getIdLong());
                 }, err -> log.warn("loot card send failed: {}", err.toString()));
             } else {
                 ch.editMessageEmbedsById(l.getDiscordMessageId(), embed).queue(null,
@@ -651,11 +650,11 @@ public class DiscordNotifier {
             MessageEmbed embed = buildRaidEmbed(r, RaidTrigger.PRE30);
             var buttons = buildRaidButtons(r);
             var buttonsArr = buttons.toArray(new net.dv8tion.jda.api.interactions.components.LayoutComponent[0]);
+            Long raidId2 = r.getId();
             ch.sendMessage(content).setEmbeds(embed).setComponents(buttonsArr)
                     .queue(msg -> {
-                        // 새 카드로 discordMessageId 갱신 → 이후 minor 편집은 새 카드에 반영
-                        r.setDiscordMessageId(msg.getIdLong());
-                        raidRepository.save(r);
+                        // targeted update (다른 필드 race 방지 · pre30Sent 반복 발송 버그 fix)
+                        raidRepository.updateDiscordMessageId(raidId2, msg.getIdLong());
                     }, err -> log.debug("pre30 fresh send failed: {}", err.toString()));
         } catch (Exception e) {
             log.debug("postRaidPre30Fresh error: {}", e.toString());

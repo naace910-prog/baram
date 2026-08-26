@@ -232,16 +232,24 @@ export default function RaidPartyPage() {
             <Card size="small" title={`문파원 (${members.length})`} style={{ position: 'sticky', top: 76 }}
                   styles={{ body: { maxHeight: 'calc(100vh - 200px)', overflowY: 'auto', padding: 8 } }}>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                {members.map(m => (
-                  <MemberChip
-                    key={m.id}
-                    id={`member:${m.id}`}
-                    label={m.nickname}
-                    memberId={m.id}
-                    count={memberOccurrence.get(m.id) ?? 0}
-                    disabled={!master}
-                  />
-                ))}
+                {members.map(m => {
+                  const isYes = raid.votes.some(v => v.memberId === m.id && v.vote === 'YES')
+                  return (
+                    <MemberChip
+                      key={m.id}
+                      id={`member:${m.id}`}
+                      label={m.nickname}
+                      memberId={m.id}
+                      count={memberOccurrence.get(m.id) ?? 0}
+                      disabled={!master}
+                      isYes={isYes}
+                    />
+                  )
+                })}
+              </div>
+              <div style={{ marginTop: 8, fontSize: 11, color: '#8c8c8c', padding: '4px 6px', borderTop: '1px solid #f0f0f0' }}>
+                <span style={{ display: 'inline-block', width: 8, height: 8, background: '#52c41a', borderRadius: '50%', marginRight: 4, verticalAlign: 'middle' }} />
+                YES 투표자 (참가 아닌 사람 넣으면 자동 YES)
               </div>
             </Card>
           </div>
@@ -355,14 +363,16 @@ export default function RaidPartyPage() {
   )
 }
 
-function MemberChip({ id, label, memberId, freeName, count, disabled, source }: {
+function MemberChip({ id, label, memberId, freeName, count, disabled, source, isYes }: {
   id: string; label: string; memberId?: number; freeName?: string; count?: number
-  disabled?: boolean; source?: { partyId: number; index: number }
+  disabled?: boolean; source?: { partyId: number; index: number }; isYes?: boolean
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id, data: { memberId, freeName, nickname: label, source }, disabled,
   })
   const showCount = (count ?? 0) > 1
+  // 우선순위: freeName(오렌지) > count>1(gold) > YES(green) > 기본(purple)
+  const color = freeName ? 'orange' : (showCount ? 'gold' : (isYes ? 'green' : 'purple'))
   return (
     <div
       ref={setNodeRef}
@@ -375,7 +385,7 @@ function MemberChip({ id, label, memberId, freeName, count, disabled, source }: 
       }}
     >
       <Tag
-        color={freeName ? 'orange' : (showCount ? 'gold' : 'purple')}
+        color={color}
         style={{ margin: 0, fontSize: 13, padding: '2px 8px', userSelect: 'none' }}
       >
         {label}{showCount ? ` (${count})` : ''}

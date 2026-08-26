@@ -3,7 +3,7 @@ package com.wind.guild.config;
 public final class AppVersion {
     private AppVersion() {}
 
-    public static final String VERSION = "v1.0.34";
+    public static final String VERSION = "v1.0.35";
 
     public static final String CHANGELOG =
             "• **분배자 표기** — 누가 언제 분배했는지 카드/사이트에 표시 (raid_loots.distributed_by/at 컬럼)\n" +
@@ -29,5 +29,8 @@ public final class AppVersion {
             "• 로그인 자동 시도: 세션마다 1회 Discord prompt=none 로 silent 로그인 시도\n" +
             "  · 성공 시 즉시 홈, 실패 시 로그인 화면 유지 (에러 알림 표시)\n" +
             "  · 재로그인 클릭 수 감소\n" +
-            "• **전역 로딩 인디케이터** — 모든 API 호출 시 상단에 얇은 progress bar (axios interceptor 기반)";
+            "• **전역 로딩 인디케이터** — 모든 API 호출 시 상단에 얇은 progress bar (axios interceptor 기반)\n" +
+            "🔧 hotfix: 30분 리마인더 반복 발송 버그 — race condition (async Discord callback 이 stale raid entity 를 save 하며 pre30Sent=false 로 덮어씀). discordMessageId 만 부분 update 하는 targeted query 로 교체\n" +
+            "• 파티 편성 사이드바: YES 투표자 = 초록색 태그 (한눈에 구분)\n" +
+            "• 파티에 문파원 추가 시 자동 YES 투표 (기존 vote 상관없이)";
 }
