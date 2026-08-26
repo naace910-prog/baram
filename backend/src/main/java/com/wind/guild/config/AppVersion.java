@@ -3,13 +3,10 @@ package com.wind.guild.config;
 public final class AppVersion {
     private AppVersion() {}
 
-    public static final String VERSION = "v1.0.22";
+    public static final String VERSION = "v1.0.23";
 
     public static final String CHANGELOG =
-            "• Discord **완료 카드에 대상별 [드랍 등록] 버튼** 추가 (문주/부문주 전용)\n" +
-            "  · 해골왕: [💀 해골왕 드랍] 1개\n" +
-            "  · 어금니: [🐲 흑룡] [🐲 묵룡] [🐲 감룡] [🐲 진룡] 4개\n" +
-            "• 클릭 → Discord 모달 팝업: 수량 · 1개당 가격 입력 → 등록\n" +
-            "• 같은 드랍 여러 개는 수량으로 (흑룡 2개 = 수량 2)\n" +
-            "• 등록 완료 시 카드 새로 발송 + 채팅에 시스템 메시지";
+            "• 분배 모달: **1/n 인원수 직접 편집** — 미등록 인원 포함 시 divisor 늘려서 등록 문파원 몫만 정확히 계산\n" +
+            "  · 예: 판매 8,000,000전, 등록 3명 체크, 미등록 2명 → divisor 5 입력 → 1인 1,600,000전\n" +
+            "  · 미등록 인원 몫은 시스템 밖에서 정산 (사이트에는 등록 문파원만 표시)";
 }

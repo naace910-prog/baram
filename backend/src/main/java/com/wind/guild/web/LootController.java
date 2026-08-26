@@ -96,15 +96,19 @@ public class LootController {
     @PostMapping("/{lootId}/distribute")
     public List<LootDto.LootView> distribute(@PathVariable Long raidId, @PathVariable Long lootId,
                                              @Valid @RequestBody LootDto.DistributeRequest req) {
-        lootService.distribute(lootId, req.memberIds());
+        lootService.distribute(lootId, req.memberIds(), req.divisor());
         discord.syncLootCard(lootId, DiscordNotifier.LootTrigger.DISTRIBUTED);
         discord.syncRaidCardFresh(raidId, DiscordNotifier.RaidTrigger.LOOT);
         try {
             var loot = lootRepo.findById(lootId).orElse(null);
             if (loot != null && loot.getSoldPrice() != null) {
-                long per = loot.getSoldPrice() / Math.max(1, req.memberIds().size());
-                chat.saveSystem("💰 " + loot.getItemName() + " " + MONEY.format(loot.getSoldPrice()) + "전 분배 "
-                        + "· " + req.memberIds().size() + "명 · 1인 " + MONEY.format(per) + "전");
+                int divisor = (req.divisor() != null && req.divisor() > 0)
+                        ? req.divisor() : req.memberIds().size();
+                long per = loot.getSoldPrice() / Math.max(1, divisor);
+                String extLabel = divisor > req.memberIds().size()
+                        ? " (외부인원 " + (divisor - req.memberIds().size()) + "명 포함)" : "";
+                chat.saveSystem("💰 " + loot.getItemName() + " " + MONEY.format(loot.getSoldPrice()) + "전 분배"
+                        + " · " + divisor + "명" + extLabel + " · 1인 " + MONEY.format(per) + "전");
             }
         } catch (Exception ignored) {}
         return lootService.listByRaid(raidId);

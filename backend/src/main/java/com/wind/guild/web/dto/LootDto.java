@@ -40,7 +40,7 @@ public class LootDto {
             boolean received,
             LocalDateTime receivedAt) {}
 
-    public record DistributeRequest(@NotNull List<Long> memberIds) {}
+    public record DistributeRequest(@NotNull List<Long> memberIds, Integer divisor) {}
 
     public record MarkPaidRequest(@NotNull Long shareId, boolean paid) {}
 

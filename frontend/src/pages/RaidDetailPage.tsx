@@ -544,20 +544,38 @@ function DistributeModal({
   onClose: () => void; onSaved: () => void
 }) {
   const { message } = AntApp.useApp()
+  const [divisor, setDivisor] = useState<number | null>(null)
+  useEffect(() => { setDivisor(picked.length > 0 ? picked.length : null) }, [picked.length, open])
   if (!loot) return null
-  const perShare = picked.length > 0 && loot.soldPrice ? Math.floor(loot.soldPrice / picked.length) : 0
+  const effectiveDivisor = divisor && divisor > 0 ? divisor : picked.length
+  const perShare = effectiveDivisor > 0 && loot.soldPrice ? Math.floor(loot.soldPrice / effectiveDivisor) : 0
+  const extraCount = Math.max(0, effectiveDivisor - picked.length)
 
   const save = async () => {
     if (picked.length === 0) { message.warning('분배 대상을 선택하세요'); return }
-    await lootApi.distribute(raidId, loot.id, picked)
-    message.success(`${picked.length}인 분배 완료`)
+    if (effectiveDivisor < picked.length) { message.warning('분배 인원수는 선택된 문파원 수보다 크거나 같아야 합니다'); return }
+    await lootApi.distribute(raidId, loot.id, picked, effectiveDivisor)
+    message.success(`${picked.length}인 분배 완료 (÷${effectiveDivisor})`)
     onSaved(); onClose()
   }
 
   return (
-    <Modal open={open} onCancel={onClose} onOk={save} title={`${loot.itemName} · 분배`} okText="분배 확정" width={520}>
-      <div style={{ marginBottom: 8 }}>
-        판매금액: <b>{loot.soldPrice?.toLocaleString() ?? 0}</b> 전 ÷ {picked.length}명 = <b>{perShare.toLocaleString()}</b> 전/인
+    <Modal open={open} onCancel={onClose} onOk={save} title={`${loot.itemName} · 분배`} okText="분배 확정" width={560}>
+      <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+        판매금액: <b>{loot.soldPrice?.toLocaleString() ?? 0}</b> 전 ÷
+        <InputNumber
+          size="small"
+          value={effectiveDivisor}
+          min={Math.max(1, picked.length)}
+          max={99}
+          onChange={(v) => setDivisor(v == null ? picked.length : Number(v))}
+          style={{ width: 70 }}
+          addonAfter="명"
+        />
+        = <b>{perShare.toLocaleString()}</b> 전/인
+        {extraCount > 0 && (
+          <span style={{ color: '#faad14', fontSize: 12 }}>· 미등록 {extraCount}명 포함</span>
+        )}
       </div>
       <Divider style={{ margin: '8px 0' }} />
       <div style={{ marginBottom: 8 }}>

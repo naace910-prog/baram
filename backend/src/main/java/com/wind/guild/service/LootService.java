@@ -111,7 +111,7 @@ public class LootService {
         lootRepository.deleteById(lootId);
     }
 
-    public void distribute(Long lootId, List<Long> memberIds) {
+    public void distribute(Long lootId, List<Long> memberIds, Integer divisorOverride) {
         RaidLoot l = lootRepository.findById(lootId)
                 .orElseThrow(() -> new IllegalArgumentException("득템 없음: " + lootId));
         if (l.getSoldPrice() == null || l.getSoldPrice() <= 0) {
@@ -120,13 +120,26 @@ public class LootService {
         if (memberIds == null || memberIds.isEmpty()) {
             throw new IllegalArgumentException("분배 대상 문파원이 없습니다");
         }
+        int divisor = (divisorOverride != null && divisorOverride > 0)
+                ? divisorOverride : memberIds.size();
+        if (divisor < memberIds.size()) {
+            throw new IllegalArgumentException("분배 인원수(" + divisor + ") 는 선택된 문파원(" + memberIds.size() + ") 보다 크거나 같아야 합니다");
+        }
         shareRepository.deleteByLootId(lootId);
         shareRepository.flush();
         long total = l.getSoldPrice();
-        long per = total / memberIds.size();
-        long remainder = total - per * memberIds.size();
+        long per = total / divisor;
+        // 나머지는 선택된 문파원끼리만 분배 (미등록 인원은 시스템 밖 정산)
+        long distributedToPicked = per * memberIds.size();
+        long remainderForPicked = 0;
+        if (divisor == memberIds.size()) {
+            // 외부인원 없음: 총액을 선택된 문파원끼리 완전 분배 (반올림 잔여도 첫 사람에게)
+            remainderForPicked = total - distributedToPicked;
+        }
+        // 외부인원 있음 (divisor > memberIds.size): 각 등록 문파원은 per 만 받고,
+        // 나머지 (total - per*divisor + 잔여) 는 시스템 밖에서 처리 → 여기서는 무시
         for (int i = 0; i < memberIds.size(); i++) {
-            long amount = per + (i == 0 ? remainder : 0);
+            long amount = per + (i == 0 ? remainderForPicked : 0);
             shareRepository.save(LootShare.builder()
                     .lootId(lootId)
                     .memberId(memberIds.get(i))
