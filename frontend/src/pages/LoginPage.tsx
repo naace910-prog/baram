@@ -7,7 +7,8 @@ import { authApi } from '@/api/client'
 const LS_ACCOUNT = 'wg.lastAccount'
 const LS_PW = 'wg.lastPw'
 const LS_REMEMBER_PW = 'wg.rememberPw'
-const APP_VERSION = 'v1.0.33'
+const SS_AUTO_TRIED = 'wg.autoAuthTried'  // sessionStorage: 1회 자동 로그인만 시도
+const APP_VERSION = 'v1.0.34'
 
 function readSaved() {
   try {
@@ -45,9 +46,21 @@ export default function LoginPage() {
 
   useEffect(() => {
     authApi.discordAuthorizeUrl()
-      .then((r) => { setDiscordEnabled(!!r.enabled); setDiscordUrl(r.url) })
+      .then((r) => {
+        setDiscordEnabled(!!r.enabled)
+        setDiscordUrl(r.url)
+        // 자동 로그인 시도: 세션마다 1회, discord 에러 없을 때만
+        try {
+          const tried = sessionStorage.getItem(SS_AUTO_TRIED)
+          if (r.enabled && r.url && !tried && !discordError && !user) {
+            sessionStorage.setItem(SS_AUTO_TRIED, '1')
+            // Discord 세션 있으면 즉시 리다이렉트, 없으면 consent_required → 로그인 화면 유지
+            window.location.href = r.url
+          }
+        } catch {}
+      })
       .catch(() => setDiscordEnabled(false))
-  }, [])
+  }, [discordError, user])
 
   const onFinish = async (v: { account: string; password: string }) => {
     try {

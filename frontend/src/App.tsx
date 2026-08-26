@@ -16,6 +16,7 @@ import PartyRolesPage from '@/pages/PartyRolesPage'
 import RaidPartyPage from '@/pages/RaidPartyPage'
 import ChatPage from '@/pages/ChatPage'
 import SettingsPage from '@/pages/SettingsPage'
+import LoadingBar from '@/components/LoadingBar'
 
 export default function App() {
   const { fetchMe, loading } = useAuth()
@@ -30,22 +31,25 @@ export default function App() {
   }
 
   return (
-    <Routes>
-      <Route path="/login" element={<LoginPage />} />
-      <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
-        <Route path="/" element={<DashboardPage />} />
-        <Route path="/raids" element={<RaidListPage />} />
-        <Route path="/raids/new" element={<RaidCreatePage />} />
-        <Route path="/raids/:id" element={<RaidDetailPage />} />
-        <Route path="/raids/:id/parties" element={<RaidPartyPage />} />
-        <Route path="/chat" element={<ChatPage />} />
-        <Route path="/stats" element={<StatsPage />} />
-        <Route path="/settings" element={<SettingsPage />} />
-        <Route path="/members" element={<MemberManagePage />} />
-        <Route path="/targets" element={<TargetManagePage />} />
-        <Route path="/party-roles" element={<PartyRolesPage />} />
-      </Route>
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+    <>
+      <LoadingBar />
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
+          <Route path="/" element={<DashboardPage />} />
+          <Route path="/raids" element={<RaidListPage />} />
+          <Route path="/raids/new" element={<RaidCreatePage />} />
+          <Route path="/raids/:id" element={<RaidDetailPage />} />
+          <Route path="/raids/:id/parties" element={<RaidPartyPage />} />
+          <Route path="/chat" element={<ChatPage />} />
+          <Route path="/stats" element={<StatsPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/members" element={<MemberManagePage />} />
+          <Route path="/targets" element={<TargetManagePage />} />
+          <Route path="/party-roles" element={<PartyRolesPage />} />
+        </Route>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </>
   )
 }

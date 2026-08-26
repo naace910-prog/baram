@@ -3,7 +3,7 @@ package com.wind.guild.config;
 public final class AppVersion {
     private AppVersion() {}
 
-    public static final String VERSION = "v1.0.33";
+    public static final String VERSION = "v1.0.34";
 
     public static final String CHANGELOG =
             "• **분배자 표기** — 누가 언제 분배했는지 카드/사이트에 표시 (raid_loots.distributed_by/at 컬럼)\n" +
@@ -25,5 +25,9 @@ public final class AppVersion {
             "  · ThreadPoolTaskExecutor (core 2, max 4, queue 100)\n" +
             "• Discord 로그인 **매번 승인 화면 뜨는 것 해결** — `prompt=none` 으로 이미 승인한 앱이면 즉시 자동 로그인 (최초 1회만 승인 필요)\n" +
             "  · 최초 사용자 or 승인 만료 시 (consent_required 에러) 자동으로 승인 화면 fallback\n" +
-            "🔧 hotfix: Discord 투표 버튼 3초 지연 — updateEmbed/notifyRaidPre30 이 self-invoke 로 @Async 우회되던 문제 (@Async 어노테이션 자체 메서드에 붙임)";
+            "🔧 hotfix: Discord 투표 버튼 3초 지연 — updateEmbed/notifyRaidPre30 이 self-invoke 로 @Async 우회되던 문제 (@Async 어노테이션 자체 메서드에 붙임)\n" +
+            "• 로그인 자동 시도: 세션마다 1회 Discord prompt=none 로 silent 로그인 시도\n" +
+            "  · 성공 시 즉시 홈, 실패 시 로그인 화면 유지 (에러 알림 표시)\n" +
+            "  · 재로그인 클릭 수 감소\n" +
+            "• **전역 로딩 인디케이터** — 모든 API 호출 시 상단에 얇은 progress bar (axios interceptor 기반)";
 }

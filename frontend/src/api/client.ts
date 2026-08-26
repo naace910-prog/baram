@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { message } from 'antd'
+import { beginLoad, endLoad } from '@/components/LoadingBar'
 import type {
   AuthUser, Member, RaidTarget, RaidListItem, RaidDetail, Loot, VoteType, RaidStatus, MemberRole, StatsResult,
   PartyRole, PartyView, PartyMemberEntry, ChannelType, ChatMessage, RaidCategory, BulkDropEntry
@@ -10,9 +11,16 @@ export const http = axios.create({
   withCredentials: true,
 })
 
+// 전역 로딩 인디케이터: 모든 요청 시작/종료 시 카운터 증감
+http.interceptors.request.use(
+  (config) => { beginLoad(); return config },
+  (err) => { endLoad(); return Promise.reject(err) }
+)
+
 http.interceptors.response.use(
-  (r) => r,
+  (r) => { endLoad(); return r },
   (err) => {
+    endLoad()
     if (err.response?.status === 401) {
       if (!location.pathname.startsWith('/login')) {
         location.href = '/login'
