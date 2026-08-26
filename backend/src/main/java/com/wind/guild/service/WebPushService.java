@@ -66,6 +66,7 @@ public class WebPushService {
         repo.deleteByMemberIdAndEndpoint(memberId, endpoint);
     }
 
+    @org.springframework.scheduling.annotation.Async("discordExecutor")
     public void sendToAll(String title, String body, String url) {
         if (pushClient == null) return;
         String payload = buildPayload(title, body, url);
@@ -73,6 +74,7 @@ public class WebPushService {
         for (PushSubscription s : repo.findAll()) sendOne(s, payload);
     }
 
+    @org.springframework.scheduling.annotation.Async("discordExecutor")
     public void sendToMember(Long memberId, String title, String body, String url) {
         if (pushClient == null) return;
         String payload = buildPayload(title, body, url);

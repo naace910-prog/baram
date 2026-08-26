@@ -54,6 +54,64 @@ public class DiscordNotifier {
     // Raid card: 한 레이드당 메시지 1개, 어떤 이벤트든 같은 카드 편집
     // ============================================================
 
+    /** 카드 렌더링용 데이터 (embed+buttons 공유). N+1 방지 목적. */
+    private record RaidCardData(
+            List<RaidVote> votes,
+            List<Long> attendeeIds,
+            List<RaidParty> parties,
+            Map<Long, List<RaidPartyMember>> partyMembersByPartyId,
+            List<RaidLoot> loots,
+            Map<Long, List<LootShare>> sharesByLootId,
+            Map<Long, String> nickMap
+    ) {}
+
+    /** 한 번의 syncRaidCard 호출 안에서 필요한 모든 데이터를 배치 로드 (N+1 제거). */
+    private RaidCardData loadCardData(Raid r) {
+        Long raidId = r.getId();
+        List<RaidVote> votes = voteRepository.findByRaidId(raidId);
+        List<Long> attendeeIds = attendeeRepository.findByRaidId(raidId).stream()
+                .map(RaidAttendee::getMemberId).toList();
+
+        List<RaidParty> parties = partyRepository.findByRaidIdOrderByDisplayOrderAsc(raidId);
+        Map<Long, List<RaidPartyMember>> partyMembersByPartyId = new HashMap<>();
+        if (!parties.isEmpty()) {
+            List<Long> pids = parties.stream().map(RaidParty::getId).toList();
+            for (RaidPartyMember m : partyMemberRepository.findByPartyIdInOrderByPartyIdAscRoleAscDisplayOrderAsc(pids)) {
+                partyMembersByPartyId.computeIfAbsent(m.getPartyId(), k -> new ArrayList<>()).add(m);
+            }
+        }
+
+        List<RaidLoot> loots = lootRepository.findByRaidId(raidId);
+        Map<Long, List<LootShare>> sharesByLootId = new HashMap<>();
+        if (!loots.isEmpty()) {
+            List<Long> lootIds = loots.stream().map(RaidLoot::getId).toList();
+            for (LootShare s : shareRepository.findByLootIdIn(lootIds)) {
+                sharesByLootId.computeIfAbsent(s.getLootId(), k -> new ArrayList<>()).add(s);
+            }
+        }
+
+        // 통합 memberId 집합 (nick 배치 조회 1회)
+        Set<Long> refIds = new HashSet<>();
+        for (RaidVote v : votes) refIds.add(v.getMemberId());
+        refIds.addAll(attendeeIds);
+        for (RaidParty p : parties) {
+            if (p.getMikeMemberId() != null) refIds.add(p.getMikeMemberId());
+            List<RaidPartyMember> ms = partyMembersByPartyId.get(p.getId());
+            if (ms != null) for (RaidPartyMember m : ms) if (m.getMemberId() != null) refIds.add(m.getMemberId());
+        }
+        for (List<LootShare> ss : sharesByLootId.values()) {
+            for (LootShare s : ss) {
+                refIds.add(s.getMemberId());
+                if (s.getPaidBy() != null) refIds.add(s.getPaidBy());
+            }
+        }
+        for (RaidLoot l : loots) if (l.getDistributedBy() != null) refIds.add(l.getDistributedBy());
+        Map<Long, String> nickMap = fetchNicks(refIds);
+
+        return new RaidCardData(votes, attendeeIds, parties, partyMembersByPartyId, loots, sharesByLootId, nickMap);
+    }
+
+    @org.springframework.scheduling.annotation.Async("discordExecutor")
     public void syncRaidCard(Long raidId, RaidTrigger trigger) {
         try {
             Raid r = raidRepository.findById(raidId).orElse(null);
@@ -63,8 +121,9 @@ public class DiscordNotifier {
             if (bot != null && bot.isReady()) {
                 TextChannel ch = bot.notifyChannel();
                 if (ch == null) return;
-                MessageEmbed embed = buildRaidEmbed(r, trigger);
-                var buttons = buildRaidButtons(r);
+                RaidCardData d = loadCardData(r);
+                MessageEmbed embed = buildRaidEmbed(r, trigger, d);
+                var buttons = buildRaidButtons(r, d);
                 var buttonsArr = buttons.toArray(new net.dv8tion.jda.api.interactions.components.LayoutComponent[0]);
 
                 if (r.getDiscordMessageId() == null) {
@@ -103,6 +162,7 @@ public class DiscordNotifier {
      * · DIST: raid.distFreshSent flag 관리
      * · 그 외: syncRaidCard 위임 (edit)
      */
+    @org.springframework.scheduling.annotation.Async("discordExecutor")
     public void syncRaidCardCategoryAware(Long raidId, RaidTrigger trigger) {
         try {
             Raid r = raidRepository.findById(raidId).orElse(null);
@@ -127,6 +187,7 @@ public class DiscordNotifier {
      * 사용: 레이드 등록·파티편성·득템 입력·분배·지급·리마인더 등 '완료' 성격 이벤트.
      * 이후 minor 이벤트 (투표 등) 는 syncRaidCard 로 새 카드에 편집.
      */
+    @org.springframework.scheduling.annotation.Async("discordExecutor")
     public void syncRaidCardFresh(Long raidId, RaidTrigger trigger) {
         try {
             Raid r = raidRepository.findById(raidId).orElse(null);
@@ -138,8 +199,9 @@ public class DiscordNotifier {
             }
             TextChannel ch = bot.notifyChannel();
             if (ch == null) return;
-            MessageEmbed embed = buildRaidEmbed(r, trigger);
-            var buttons = buildRaidButtons(r);
+            RaidCardData d = loadCardData(r);
+            MessageEmbed embed = buildRaidEmbed(r, trigger, d);
+            var buttons = buildRaidButtons(r, d);
             var buttonsArr = buttons.toArray(new net.dv8tion.jda.api.interactions.components.LayoutComponent[0]);
             ch.sendMessageEmbeds(embed).setComponents(buttonsArr).queue(msg -> {
                 r.setDiscordMessageId(msg.getIdLong());
@@ -151,6 +213,10 @@ public class DiscordNotifier {
     }
 
     private MessageEmbed buildRaidEmbed(Raid r, RaidTrigger trigger) {
+        return buildRaidEmbed(r, trigger, loadCardData(r));
+    }
+
+    private MessageEmbed buildRaidEmbed(Raid r, RaidTrigger trigger, RaidCardData d) {
         String title;
         Color color;
         switch (r.getStatus()) {
@@ -170,30 +236,15 @@ public class DiscordNotifier {
             }
         }
 
-        List<RaidVote> votes = voteRepository.findByRaidId(r.getId());
+        // 캐시된 데이터 사용 (N+1 제거)
+        List<RaidVote> votes = d.votes();
         List<Long> yesIds = votes.stream().filter(v -> v.getVote() == VoteType.YES).map(RaidVote::getMemberId).toList();
         List<Long> noIds = votes.stream().filter(v -> v.getVote() == VoteType.NO).map(RaidVote::getMemberId).toList();
         List<Long> maybeIds = votes.stream().filter(v -> v.getVote() == VoteType.MAYBE).map(RaidVote::getMemberId).toList();
-
-        List<Long> attendeeIds = attendeeRepository.findByRaidId(r.getId()).stream()
-                .map(RaidAttendee::getMemberId).toList();
-
-        // 파티 참가자 memberId 도 nick 조회 대상에 포함
-        List<RaidParty> parties = partyRepository.findByRaidIdOrderByDisplayOrderAsc(r.getId());
-        Map<Long, List<RaidPartyMember>> partyMembersMap = new HashMap<>();
-        for (RaidParty p : parties) {
-            partyMembersMap.put(p.getId(), partyMemberRepository.findByPartyIdOrderByRoleAscDisplayOrderAsc(p.getId()));
-        }
-
-        Set<Long> refIds = new HashSet<>();
-        refIds.addAll(yesIds); refIds.addAll(noIds); refIds.addAll(maybeIds); refIds.addAll(attendeeIds);
-        for (RaidParty p : parties) {
-            if (p.getMikeMemberId() != null) refIds.add(p.getMikeMemberId());
-            for (RaidPartyMember m : partyMembersMap.get(p.getId())) {
-                if (m.getMemberId() != null) refIds.add(m.getMemberId());
-            }
-        }
-        Map<Long, String> nickMap = fetchNicks(refIds);
+        List<Long> attendeeIds = d.attendeeIds();
+        List<RaidParty> parties = d.parties();
+        Map<Long, List<RaidPartyMember>> partyMembersMap = d.partyMembersByPartyId();
+        Map<Long, String> nickMap = d.nickMap();
 
         RaidTarget t = r.getTarget();
         String label = t != null ? t.getName()
@@ -242,7 +293,7 @@ public class DiscordNotifier {
         }
 
         appendPartiesToEmbedShared(eb, parties, partyMembersMap, nickMap);
-        appendLootsToEmbed(eb, r.getId());
+        appendLootsToEmbed(eb, d);
 
         String siteLink = props.getSiteBaseUrl() + "/raids/" + r.getId();
         eb.setFooter("사이트: " + siteLink);
@@ -318,25 +369,23 @@ public class DiscordNotifier {
         }
     }
 
-    private void appendLootsToEmbed(EmbedBuilder eb, Long raidId) {
-        List<RaidLoot> loots = lootRepository.findByRaidId(raidId);
+    private void appendLootsToEmbed(EmbedBuilder eb, RaidCardData d) {
+        List<RaidLoot> loots = d.loots();
         if (loots.isEmpty()) return;
-        // 분배자 nick 조회
-        Set<Long> distIds = new HashSet<>();
-        for (RaidLoot l : loots) if (l.getDistributedBy() != null) distIds.add(l.getDistributedBy());
-        Map<Long, String> distNickMap = fetchNicks(distIds);
+        Map<Long, String> nickMap = d.nickMap();
+        Map<Long, List<LootShare>> sharesMap = d.sharesByLootId();
         StringBuilder sb = new StringBuilder();
         for (RaidLoot l : loots) {
             sb.append("• ").append(l.getItemName());
             if (l.isDropped()) {
                 if (l.getSoldPrice() != null) {
                     sb.append(" · ").append(MONEY.format(l.getSoldPrice())).append("전");
-                    long total = shareRepository.findByLootId(l.getId()).size();
-                    long paid = shareRepository.findByLootId(l.getId()).stream()
-                            .filter(LootShare::isPaid).count();
+                    List<LootShare> shares = sharesMap.getOrDefault(l.getId(), List.of());
+                    long total = shares.size();
+                    long paid = shares.stream().filter(LootShare::isPaid).count();
                     if (total > 0) sb.append(" (지급 ").append(paid).append("/").append(total).append(")");
                     if (l.getDistributedBy() != null && l.getDistributedAt() != null) {
-                        String nick = distNickMap.getOrDefault(l.getDistributedBy(), "#" + l.getDistributedBy());
+                        String nick = nickMap.getOrDefault(l.getDistributedBy(), "#" + l.getDistributedBy());
                         sb.append(" · 분배 ").append(nick)
                                 .append(" · ").append(l.getDistributedAt().format(FMT));
                     }
@@ -350,9 +399,12 @@ public class DiscordNotifier {
     }
 
     private List<ActionRow> buildRaidButtons(Raid r) {
+        return buildRaidButtons(r, loadCardData(r));
+    }
+
+    private List<ActionRow> buildRaidButtons(Raid r, RaidCardData d) {
         String siteLink = props.getSiteBaseUrl() + "/raids/" + r.getId();
         if (r.getStatus() == RaidStatus.DONE) {
-            // 완료 상태: 상단 = [상세보기] + 대상별 [➕ 추가] · 하단 = 각 loot 라인 상태별 액션
             List<RaidTarget> targets;
             if (r.getTarget() != null) {
                 targets = List.of(r.getTarget());
@@ -363,7 +415,6 @@ public class DiscordNotifier {
             }
             List<ActionRow> rows = new ArrayList<>();
 
-            // Row 1: 상세보기 + 대상별 [➕ 추가] (라벨 명확화: '드랍' → '추가')
             List<Button> row1 = new ArrayList<>();
             row1.add(Button.link(siteLink, "상세보기"));
             for (RaidTarget t : targets) {
@@ -373,26 +424,23 @@ public class DiscordNotifier {
             }
             rows.add(ActionRow.of(row1));
 
-            // Row 2+: 각 loot 라인마다 상태별 액션 (최대 4행 x 5버튼 = 20개)
-            List<RaidLoot> loots = lootRepository.findByRaidId(r.getId());
+            // 캐시된 loots + shares 사용 (N+1 제거)
+            List<RaidLoot> loots = d.loots();
+            Map<Long, List<LootShare>> sharesMap = d.sharesByLootId();
             List<Button> lootBtns = new ArrayList<>();
             for (RaidLoot l : loots) {
                 if (lootBtns.size() >= 20) break;
                 String shortName = l.getItemName();
                 if (shortName.length() > 10) shortName = shortName.substring(0, 10);
-                boolean hasShares = !shareRepository.findByLootId(l.getId()).isEmpty();
+                boolean hasShares = !sharesMap.getOrDefault(l.getId(), List.of()).isEmpty();
                 if (l.getSoldPrice() == null || l.getSoldPrice() <= 0) {
-                    // 판매금 없음
                     lootBtns.add(Button.primary("loot:price:" + l.getId(), "💵 " + shortName));
                 } else if (hasShares) {
-                    // 이미 분배됨: 지급 관리 UI
                     lootBtns.add(Button.secondary("loot:paid:" + l.getId(), "💰 " + shortName));
                 } else {
-                    // 판매금 있음, 미분배
                     lootBtns.add(Button.success("loot:distribute:" + l.getId(), "⚖️ " + shortName));
                 }
             }
-            // 5개씩 끊어서 ActionRow 분할
             for (int i = 0; i < lootBtns.size(); i += 5) {
                 rows.add(ActionRow.of(lootBtns.subList(i, Math.min(i + 5, lootBtns.size()))));
                 if (rows.size() >= 5) break;
@@ -410,6 +458,7 @@ public class DiscordNotifier {
     // Loot card: 득템 1건당 메시지 1개, 정산 상태 변경 시 편집
     // ============================================================
 
+    @org.springframework.scheduling.annotation.Async("discordExecutor")
     public void syncLootCard(Long lootId, LootTrigger trigger) {
         try {
             RaidLoot l = lootRepository.findById(lootId).orElse(null);
@@ -542,6 +591,7 @@ public class DiscordNotifier {
     public void notifyRaidPre30(Long raidId) { syncRaidCard(raidId, RaidTrigger.PRE30); }
 
     /** notify 채널에 텍스트 메시지 발송 (알림 등 별도 메시지용). */
+    @org.springframework.scheduling.annotation.Async("discordExecutor")
     public void postAlertMessage(String content) {
         try {
             DiscordBotService b = bot();
@@ -557,6 +607,7 @@ public class DiscordNotifier {
 
     // 30분 전 리마인더는 **새 메시지** 로 (알림 트리거를 위해)
     // 임베드는 레이드 카드와 동일 (참가/불참/미정 닉네임 · 파티 편성 · 득템 포함)
+    @org.springframework.scheduling.annotation.Async("discordExecutor")
     public void postRaidPre30Fresh(Long raidId) {
         try {
             DiscordBotService b = bot();

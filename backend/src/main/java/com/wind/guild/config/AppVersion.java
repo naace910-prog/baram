@@ -3,7 +3,7 @@ package com.wind.guild.config;
 public final class AppVersion {
     private AppVersion() {}
 
-    public static final String VERSION = "v1.0.30";
+    public static final String VERSION = "v1.0.31";
 
     public static final String CHANGELOG =
             "• **분배자 표기** — 누가 언제 분배했는지 카드/사이트에 표시 (raid_loots.distributed_by/at 컬럼)\n" +
@@ -14,5 +14,13 @@ public final class AppVersion {
             "  · DIST (분배): 첫 분배는 new, 이후는 edit\n" +
             "  · 지급(paid) 토글: 항상 edit\n" +
             "  · syncRaidCardCategoryAware 로 통일\n" +
-            "• 사이트 주요 모달 (분배 · 득템편집 · 드랍대량입력) Enter 키 → 확인 버튼 자동 클릭";
+            "• 사이트 주요 모달 (분배 · 득템편집 · 드랍대량입력) Enter 키 → 확인 버튼 자동 클릭\n" +
+            "\n" +
+            "🚀 **성능 최적화**\n" +
+            "• Discord 카드 embed rebuild N+1 쿼리 제거 — 30+ 쿼리 → 6~8 쿼리 (~5배 빠름)\n" +
+            "  · RaidCardData 캐시 홀더 도입, syncRaidCard 마다 1회 로드\n" +
+            "  · LootShareRepository.findByLootIdIn / RaidPartyMemberRepository.findByPartyIdIn 배치\n" +
+            "• Discord/WebPush 발송 = @Async('discordExecutor') 백그라운드 스레드\n" +
+            "  · 백엔드 API 응답이 외부 I/O 를 안 기다림 (레이드 저장/투표/지급 클릭 즉시 응답)\n" +
+            "  · ThreadPoolTaskExecutor (core 2, max 4, queue 100)";
 }
