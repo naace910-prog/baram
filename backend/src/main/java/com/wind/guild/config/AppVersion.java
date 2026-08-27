@@ -3,7 +3,7 @@ package com.wind.guild.config;
 public final class AppVersion {
     private AppVersion() {}
 
-    public static final String VERSION = "v1.0.36";
+    public static final String VERSION = "v1.0.37";
 
     public static final String CHANGELOG =
             "• **분배자 표기** — 누가 언제 분배했는지 카드/사이트에 표시 (raid_loots.distributed_by/at 컬럼)\n" +
@@ -33,5 +33,14 @@ public final class AppVersion {
             "🔧 hotfix: 30분 리마인더 반복 발송 버그 — race condition (async Discord callback 이 stale raid entity 를 save 하며 pre30Sent=false 로 덮어씀). discordMessageId 만 부분 update 하는 targeted query 로 교체\n" +
             "• 파티 편성 사이드바: YES 투표자 = 초록색 태그 (한눈에 구분)\n" +
             "• 파티에 문파원 추가 시 자동 YES 투표 (기존 vote 상관없이)\n" +
-            "• **노쇼 방지**: 파티 저장 시 어느 파티에도 편성 안 된 YES 투표자 → NO 자동 변경 · 채팅 알림";
+            "• **노쇼 방지**: 파티 저장 시 어느 파티에도 편성 안 된 YES 투표자 → NO 자동 변경 · 채팅 알림\n" +
+            "🚀 파티 저장 성능 3배 개선:\n" +
+            "  · 프론트: 파티별 순차 저장 → Promise.all 병렬 저장\n" +
+            "  · 백엔드 autoYesVote: N번 findByRaidIdAndMemberId → 1번 findByRaidId 배치 캐시\n" +
+            "  · 백엔드 syncAttendeesFromParties: 파티별 findByPartyId → 1번 findByPartyIdIn\n" +
+            "• 모바일 파티 UI:\n" +
+            "  · 사이드바 상단 스택 (768px 이하)\n" +
+            "  · 하단 FAB 저장 버튼 (스크롤 없이 저장 가능)\n" +
+            "  · 헤더 버튼 size='small' 로 압축\n" +
+            "• 뒤로가기 방지: 저장 안 한 변경사항 있으면 경고 모달 (편집 → 이탈 실수 방지)";
 }

@@ -157,11 +157,13 @@ public class PartyService {
     }
 
     private void autoYesVoteForPartyMembers(Long raidId, List<PartyDto.MemberEntry> members) {
+        // 배치: raid 의 모든 vote 한 번에 조회 (기존: N번 findByRaidIdAndMemberId)
+        Map<Long, RaidVote> byMember = new HashMap<>();
+        for (RaidVote v : voteRepo.findByRaidId(raidId)) byMember.put(v.getMemberId(), v);
         for (PartyDto.MemberEntry e : members) {
             if (e.memberId() == null) continue;
-            var existing = voteRepo.findByRaidIdAndMemberId(raidId, e.memberId());
-            if (existing.isPresent()) {
-                var v = existing.get();
+            RaidVote v = byMember.get(e.memberId());
+            if (v != null) {
                 if (v.getVote() != VoteType.YES) {
                     v.setVote(VoteType.YES);
                     voteRepo.save(v);
@@ -298,16 +300,20 @@ public class PartyService {
     }
 
     private void syncAttendeesFromParties(Long raidId) {
+        // 배치: 각 파티별 findByPartyId → 1번 findByPartyIdIn 으로
         List<RaidParty> parties = partyRepo.findByRaidIdOrderByDisplayOrderAsc(raidId);
         Set<Long> distinctIds = new HashSet<>();
         for (RaidParty pp : parties) {
             if (pp.getMikeMemberId() != null) distinctIds.add(pp.getMikeMemberId());
-            for (RaidPartyMember m : memberRepo.findByPartyIdOrderByRoleAscDisplayOrderAsc(pp.getId())) {
+        }
+        if (!parties.isEmpty()) {
+            List<Long> pids = parties.stream().map(RaidParty::getId).toList();
+            for (RaidPartyMember m : memberRepo.findByPartyIdInOrderByPartyIdAscRoleAscDisplayOrderAsc(pids)) {
                 if (m.getMemberId() != null) distinctIds.add(m.getMemberId());
             }
         }
         attendeeRepo.deleteByRaidId(raidId);
-        attendeeRepo.flush();  // insert 전에 delete 실행 확정 (unique 제약 충돌 방지)
+        attendeeRepo.flush();
         for (Long mid : distinctIds) {
             attendeeRepo.save(RaidAttendee.builder().raidId(raidId).memberId(mid).build());
         }

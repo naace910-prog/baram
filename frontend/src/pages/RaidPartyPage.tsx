@@ -178,8 +178,8 @@ export default function RaidPartyPage() {
 
   const saveAll = async () => {
     try {
-      for (const pid of dirty) await partyApi.replaceMembers(pid, draft[pid] ?? [])
-      // 모든 파티 저장 후 노쇼 방지 실행
+      // 병렬 저장 (순차 대비 N배 빠름)
+      await Promise.all([...dirty].map(pid => partyApi.replaceMembers(pid, draft[pid] ?? [])))
       const r = await partyApi.pruneNoShows(raidId)
       message.success(`${dirty.size}개 파티 저장` + (r.changed > 0 ? ` · 미편성 ${r.changed}명 불참 처리` : ''))
       qc.invalidateQueries({ queryKey: ['parties', raidId] })
@@ -206,11 +206,38 @@ export default function RaidPartyPage() {
     })
   }
 
+  const tryBack = () => {
+    if (dirty.size > 0) {
+      modal.confirm({
+        title: '저장하지 않은 변경사항이 있습니다',
+        content: `파티 ${dirty.size}개 저장 안 됨. 그대로 나가면 사라집니다.`,
+        okText: '나가기 (저장 안 함)',
+        cancelText: '머무르기',
+        onOk: () => nav(`/raids/${raidId}`),
+      })
+    } else {
+      nav(`/raids/${raidId}`)
+    }
+  }
+
   return (
     <>
+      <style>{`
+        .wg-party-grid { display: grid; gap: 12px; grid-template-columns: minmax(200px, 260px) 1fr; }
+        @media (max-width: 768px) {
+          .wg-party-grid { grid-template-columns: 1fr; }
+          .wg-party-sidebar { position: static !important; max-height: 200px !important; }
+        }
+        @media (max-width: 768px) {
+          .wg-save-fab {
+            display: flex !important; position: fixed; bottom: 16px; right: 16px; left: 16px;
+            z-index: 999; box-shadow: 0 4px 16px rgba(0,0,0,0.25); justify-content: center;
+          }
+        }
+      `}</style>
       <div className="page-header">
-        <Space>
-          <Button icon={<ArrowLeftOutlined />} onClick={() => nav(`/raids/${raidId}`)}>레이드로</Button>
+        <Space wrap>
+          <Button icon={<ArrowLeftOutlined />} onClick={tryBack}>레이드로</Button>
           <h2 style={{ margin: 0 }}>파티 편성 · {raid.targetIcon ?? '🎯'} {raid.targetName} · {dayjs(raid.scheduledAt).format('MM/DD HH:mm')}</h2>
         </Space>
         {master && (
@@ -234,10 +261,10 @@ export default function RaidPartyPage() {
       )}
 
       <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
-        <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'minmax(200px, 260px) 1fr' }}>
+        <div className="wg-party-grid">
           {/* 사이드바: 문파원 목록 */}
           <div>
-            <Card size="small" title={`문파원 (${members.length})`} style={{ position: 'sticky', top: 76 }}
+            <Card size="small" title={`문파원 (${members.length})`} className="wg-party-sidebar" style={{ position: 'sticky', top: 76 }}
                   styles={{ body: { maxHeight: 'calc(100vh - 200px)', overflowY: 'auto', padding: 8 } }}>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                 {members.map(m => {
@@ -300,6 +327,14 @@ export default function RaidPartyPage() {
           ) : null}
         </DragOverlay>
       </DndContext>
+
+      {master && dirty.size > 0 && (
+        <div className="wg-save-fab" style={{ display: 'none' }}>
+          <Button type="primary" size="large" block onClick={saveAll}>
+            💾 {dirty.size}개 파티 저장
+          </Button>
+        </div>
+      )}
 
       <PartyCreateModal
         open={creating}
