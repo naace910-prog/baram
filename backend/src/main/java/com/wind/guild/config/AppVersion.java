@@ -3,7 +3,7 @@ package com.wind.guild.config;
 public final class AppVersion {
     private AppVersion() {}
 
-    public static final String VERSION = "v1.0.37";
+    public static final String VERSION = "v1.0.38";
 
     public static final String CHANGELOG =
             "• **분배자 표기** — 누가 언제 분배했는지 카드/사이트에 표시 (raid_loots.distributed_by/at 컬럼)\n" +
@@ -42,5 +42,9 @@ public final class AppVersion {
             "  · 사이드바 상단 스택 (768px 이하)\n" +
             "  · 하단 FAB 저장 버튼 (스크롤 없이 저장 가능)\n" +
             "  · 헤더 버튼 size='small' 로 압축\n" +
-            "• 뒤로가기 방지: 저장 안 한 변경사항 있으면 경고 모달 (편집 → 이탈 실수 방지)";
+            "• 뒤로가기 방지: 저장 안 한 변경사항 있으면 경고 모달 (편집 → 이탈 실수 방지)\n" +
+            "🎨 문파 아이콘 자체 제작 (기존 🌸 이모지 대체):\n" +
+            "  · 매화 5잎 · 보라 그라디언트 배경 · 바람 소용돌이 (오리엔탈 느낌)\n" +
+            "  · icon.svg (기본) · icon-maskable.svg (Android adaptive)\n" +
+            "  · manifest + apple-touch-icon 전부 새 아이콘";
 }

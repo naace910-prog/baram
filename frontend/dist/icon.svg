@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="개화 문파">
+  <defs>
+    <!-- 배경: 보라 그라디언트 (문파 primary 컬러 매치) -->
+    <radialGradient id="bg" cx="50%" cy="35%" r="80%">
+      <stop offset="0%" stop-color="#a78bfa"/>
+      <stop offset="55%" stop-color="#7c3aed"/>
+      <stop offset="100%" stop-color="#3b0764"/>
+    </radialGradient>
+    <!-- 꽃잎: 밝은 분홍→진분홍 (매화색) -->
+    <radialGradient id="petal" cx="50%" cy="30%" r="80%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="45%" stop-color="#fce7f3"/>
+      <stop offset="85%" stop-color="#f9a8d4"/>
+      <stop offset="100%" stop-color="#ec4899"/>
+    </radialGradient>
+    <!-- 중심 수술 -->
+    <radialGradient id="core" cx="50%" cy="50%" r="60%">
+      <stop offset="0%" stop-color="#fef9c3"/>
+      <stop offset="60%" stop-color="#fbbf24"/>
+      <stop offset="100%" stop-color="#d97706"/>
+    </radialGradient>
+    <filter id="soft" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur stdDeviation="1.5"/>
+    </filter>
+  </defs>
+
+  <!-- 배경 (라운드 사각) -->
+  <rect width="512" height="512" rx="96" fill="url(#bg)"/>
+
+  <!-- 미묘한 바람 소용돌이 (바람의 나라 오리엔탈 느낌) -->
+  <g opacity="0.10" stroke="#ffffff" stroke-width="3" fill="none" stroke-linecap="round">
+    <path d="M 80 160 Q 180 120 260 180 T 440 160"/>
+    <path d="M 60 380 Q 180 340 280 400 T 460 380"/>
+  </g>
+
+  <!-- 매화 5잎 -->
+  <g transform="translate(256 260)">
+    <!-- 각 꽃잎: 위쪽을 향하는 물방울, 72° 씩 회전 5개 -->
+    <g stroke="#be185d" stroke-width="2.5" stroke-opacity="0.35">
+      <path d="M 0 -30 Q -70 -70 -50 -140 Q 0 -170 50 -140 Q 70 -70 0 -30 Z" fill="url(#petal)"/>
+      <g transform="rotate(72)">
+        <path d="M 0 -30 Q -70 -70 -50 -140 Q 0 -170 50 -140 Q 70 -70 0 -30 Z" fill="url(#petal)"/>
+      </g>
+      <g transform="rotate(144)">
+        <path d="M 0 -30 Q -70 -70 -50 -140 Q 0 -170 50 -140 Q 70 -70 0 -30 Z" fill="url(#petal)"/>
+      </g>
+      <g transform="rotate(216)">
+        <path d="M 0 -30 Q -70 -70 -50 -140 Q 0 -170 50 -140 Q 70 -70 0 -30 Z" fill="url(#petal)"/>
+      </g>
+      <g transform="rotate(288)">
+        <path d="M 0 -30 Q -70 -70 -50 -140 Q 0 -170 50 -140 Q 70 -70 0 -30 Z" fill="url(#petal)"/>
+      </g>
+    </g>
+
+    <!-- 중심 -->
+    <circle r="34" fill="url(#core)"/>
+    <!-- 수술 6개 -->
+    <g fill="#fef9c3" stroke="#d97706" stroke-width="1">
+      <circle cx="0" cy="-18" r="5"/>
+      <circle cx="17" cy="-9" r="5"/>
+      <circle cx="17" cy="9" r="5"/>
+      <circle cx="0" cy="18" r="5"/>
+      <circle cx="-17" cy="9" r="5"/>
+      <circle cx="-17" cy="-9" r="5"/>
+    </g>
+  </g>
+</svg>
