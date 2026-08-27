@@ -132,6 +132,8 @@ export const partyApi = {
   delete: (partyId: number) => http.delete(`/parties/${partyId}`).then(() => true),
   replaceMembers: (partyId: number, members: PartyMemberEntry[]) =>
     http.put<PartyView>(`/parties/${partyId}/members`, { members }).then((r) => r.data),
+  pruneNoShows: (raidId: number) =>
+    http.post<{ changed: number }>(`/raids/${raidId}/parties/prune-no-shows`).then((r) => r.data),
   autoAssign: (raidId: number) =>
     http.post<{
       basis: string

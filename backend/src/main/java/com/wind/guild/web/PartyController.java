@@ -101,6 +101,18 @@ public class PartyController {
         return view;
     }
 
+    @PostMapping("/api/raids/{raidId}/parties/prune-no-shows")
+    public java.util.Map<String, Object> pruneNoShows(@PathVariable Long raidId) {
+        int changed = service.pruneNonPartyYesToNo(raidId);
+        if (changed > 0) {
+            discord.syncRaidCard(raidId, DiscordNotifier.RaidTrigger.VOTE);
+            try {
+                chat.saveSystem("🚫 파티 미편성 YES 투표자 " + changed + "명 → 불참(NO) 자동 변경 (노쇼 방지)");
+            } catch (Exception ignored) {}
+        }
+        return java.util.Map.of("changed", changed);
+    }
+
     @PostMapping("/api/raids/{raidId}/parties/auto-assign")
     public PartyDto.AutoAssignResult autoAssign(@PathVariable Long raidId) {
         PartyDto.AutoAssignResult result = service.autoAssignFromPrevious(raidId);

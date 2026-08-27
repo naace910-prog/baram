@@ -131,6 +131,31 @@ public class PartyService {
                 .filter(v -> v.id().equals(partyId)).findFirst().orElseThrow();
     }
 
+    /**
+     * 노쇼 방지: 현재 파티 편성 상태에서 어느 파티에도 없는 YES 투표자를 NO 로 변경.
+     * '저장' 클릭 후 프론트가 호출.
+     */
+    public int pruneNonPartyYesToNo(Long raidId) {
+        // 파티에 포함된 등록 memberId 수집 (모든 파티)
+        Set<Long> partyMemberIds = new HashSet<>();
+        for (RaidParty p : partyRepo.findByRaidIdOrderByDisplayOrderAsc(raidId)) {
+            if (p.getMikeMemberId() != null) partyMemberIds.add(p.getMikeMemberId());
+            for (RaidPartyMember m : memberRepo.findByPartyIdOrderByRoleAscDisplayOrderAsc(p.getId())) {
+                if (m.getMemberId() != null) partyMemberIds.add(m.getMemberId());
+            }
+        }
+        // YES 투표자 중 파티에 없는 사람 → NO
+        int changed = 0;
+        for (RaidVote v : voteRepo.findByRaidId(raidId)) {
+            if (v.getVote() == VoteType.YES && !partyMemberIds.contains(v.getMemberId())) {
+                v.setVote(VoteType.NO);
+                voteRepo.save(v);
+                changed++;
+            }
+        }
+        return changed;
+    }
+
     private void autoYesVoteForPartyMembers(Long raidId, List<PartyDto.MemberEntry> members) {
         for (PartyDto.MemberEntry e : members) {
             if (e.memberId() == null) continue;

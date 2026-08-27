@@ -168,15 +168,23 @@ export default function RaidPartyPage() {
   const saveParty = async (partyId: number) => {
     try {
       await partyApi.replaceMembers(partyId, draft[partyId] ?? [])
-      message.success('파티 저장 완료')
+      // 저장 후 노쇼 방지: 파티 미편성 YES → NO 자동 변경
+      const r = await partyApi.pruneNoShows(raidId)
+      message.success('파티 저장 완료' + (r.changed > 0 ? ` · 미편성 ${r.changed}명 불참 처리` : ''))
       qc.invalidateQueries({ queryKey: ['parties', raidId] })
+      qc.invalidateQueries({ queryKey: ['raid', raidId] })
     } catch {}
   }
 
   const saveAll = async () => {
-    for (const pid of dirty) await partyApi.replaceMembers(pid, draft[pid] ?? [])
-    message.success(`${dirty.size}개 파티 저장`)
-    qc.invalidateQueries({ queryKey: ['parties', raidId] })
+    try {
+      for (const pid of dirty) await partyApi.replaceMembers(pid, draft[pid] ?? [])
+      // 모든 파티 저장 후 노쇼 방지 실행
+      const r = await partyApi.pruneNoShows(raidId)
+      message.success(`${dirty.size}개 파티 저장` + (r.changed > 0 ? ` · 미편성 ${r.changed}명 불참 처리` : ''))
+      qc.invalidateQueries({ queryKey: ['parties', raidId] })
+      qc.invalidateQueries({ queryKey: ['raid', raidId] })
+    } catch {}
   }
 
   const addFreeName = (partyId: number, role: string) => {
