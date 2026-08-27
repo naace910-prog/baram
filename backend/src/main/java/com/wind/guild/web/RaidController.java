@@ -120,6 +120,21 @@ public class RaidController {
         return raidService.get(raidId);
     }
 
+    @PostMapping("/{id}/force-discord-card")
+    public RaidDto.DetailView forceDiscordCard(@PathVariable("id") Long raidId, HttpSession session) {
+        String role = (String) session.getAttribute(SessionKeys.MEMBER_ROLE);
+        if (!"MASTER".equals(role) && !"VICE".equals(role)) {
+            throw new IllegalStateException("문주/부문주만 실행 가능합니다");
+        }
+        // discordMessageId 초기화 → syncRaidCard 가 새 메시지 발송
+        raidRepo.findById(raidId).ifPresent(r -> {
+            r.setDiscordMessageId(null);
+            raidRepo.save(r);
+        });
+        discord.syncRaidCard(raidId, DiscordNotifier.RaidTrigger.CREATED);
+        return raidService.get(raidId);
+    }
+
     @PostMapping("/{id}/send-pre30")
     public RaidDto.DetailView sendPre30Manual(@PathVariable("id") Long raidId, HttpSession session) {
         String role = (String) session.getAttribute(SessionKeys.MEMBER_ROLE);

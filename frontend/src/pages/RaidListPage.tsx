@@ -132,9 +132,7 @@ function RaidCard({ raid: r, nickById, onOpen }: {
           )}
         </div>
 
-        <Button type="link" icon={<ArrowRightOutlined />} onClick={(e) => { e.stopPropagation(); onOpen() }}>
-          상세
-        </Button>
+        <ArrowRightOutlined style={{ color: '#8c8c8c', fontSize: 18 }} />
       </div>
 
       {/* Vote counts summary */}

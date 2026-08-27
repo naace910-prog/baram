@@ -79,14 +79,17 @@ export default function DashboardPage() {
             dataSource={upcoming}
             renderItem={(r) => (
               <List.Item
-                actions={[<Button size="small" onClick={() => nav(`/raids/${r.id}`)}>상세</Button>]}
+                onClick={() => nav(`/raids/${r.id}`)}
+                style={{ cursor: 'pointer', transition: 'background 150ms' }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = '#fafafa' }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = '' }}
               >
                 <List.Item.Meta
                   title={<>
-                    <Tag color="purple">{r.targetIcon ?? '🎯'} {r.targetName}</Tag>
+                    <Tag color="purple">{r.targetIcon ?? '🎯'} {r.targetName ?? (r.category === 'FANG' ? '어금니' : '레이드')}</Tag>
                     {dayjs(r.scheduledAt).format('MM/DD(dd) HH:mm')}
                   </>}
-                  description={<>드랍: {r.dropItemName} · 참가 {r.yesCount} / 불참 {r.noCount} / 미정 {r.maybeCount}</>}
+                  description={<>드랍: {r.dropItemName ?? '-'} · 참가 {r.yesCount} / 불참 {r.noCount} / 미정 {r.maybeCount}</>}
                 />
               </List.Item>
             )}

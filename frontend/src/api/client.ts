@@ -82,6 +82,8 @@ export const raidApi = {
     http.put<RaidDetail>(`/raids/${id}/attendees`, { memberIds }).then((r) => r.data),
   sendPre30Manual: (id: number) =>
     http.post<RaidDetail>(`/raids/${id}/send-pre30`).then((r) => r.data),
+  forceDiscordCard: (id: number) =>
+    http.post<RaidDetail>(`/raids/${id}/force-discord-card`).then((r) => r.data),
 }
 
 export const statsApi = {

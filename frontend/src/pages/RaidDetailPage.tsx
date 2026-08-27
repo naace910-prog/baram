@@ -119,6 +119,29 @@ export default function RaidDetailPage() {
     })
   }
 
+  const forceCard = () => {
+    modal.confirm({
+      title: 'Discord 카드 강제 재발송',
+      content: (
+        <div>
+          <div>기존 카드 링크 해제 후 알림 채널에 <b>새 카드 발송</b>.</div>
+          <div style={{ marginTop: 8, color: '#8c8c8c', fontSize: 12 }}>사용 사례: 최초 등록 시 발송 실패했거나 옛 카드가 사라진 경우.</div>
+        </div>
+      ),
+      okText: '재발송',
+      cancelText: '취소',
+      onOk: async () => {
+        try {
+          await raidApi.forceDiscordCard(raidId)
+          message.success('카드 재발송 요청')
+          qc.invalidateQueries({ queryKey: ['raid', raidId] })
+        } catch (e: any) {
+          message.error(e?.response?.data?.error ?? '발송 실패')
+        }
+      },
+    })
+  }
+
   const sendPre30 = () => {
     modal.confirm({
       title: '수동 30분 리마인더 발송',
@@ -148,6 +171,9 @@ export default function RaidDetailPage() {
       <div className="page-header">
         <h2 style={{ margin: 0 }}>레이드 상세</h2>
         <Space wrap>
+          {isMaster(user) && (
+            <Button onClick={forceCard}>🔄 카드 재발송</Button>
+          )}
           {isMaster(user) && raid.status === 'PLANNED' && (
             <Button onClick={sendPre30}>🔔 리마인더 발송</Button>
           )}

@@ -3,7 +3,7 @@ package com.wind.guild.config;
 public final class AppVersion {
     private AppVersion() {}
 
-    public static final String VERSION = "v1.0.38";
+    public static final String VERSION = "v1.0.39";
 
     public static final String CHANGELOG =
             "• **분배자 표기** — 누가 언제 분배했는지 카드/사이트에 표시 (raid_loots.distributed_by/at 컬럼)\n" +
