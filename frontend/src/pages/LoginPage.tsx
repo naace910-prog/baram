@@ -94,10 +94,10 @@ export default function LoginPage() {
       >
         <div style={{ textAlign: 'center', marginBottom: 24 }}>
           <div style={{ marginBottom: 8, textAlign: 'center' }}>
-            <img src="/icon-256.png" alt="개화 문파" style={{ width: 96, height: 96, borderRadius: '50%', boxShadow: '0 4px 12px rgba(124,58,237,0.4)' }} />
+            <img src="/icon-logo-256.png" alt="開花 개화 문파" style={{ width: 180, height: 180, objectFit: 'contain' }} />
           </div>
-          <h1 style={{ margin: '0 0 4px', color: '#7c3aed', fontSize: 24, letterSpacing: '-0.5px' }}>
-            바람클래식 · 개화
+          <h1 style={{ margin: '0 0 4px', color: '#7c3aed', fontSize: 20, letterSpacing: '-0.5px' }}>
+            바람클래식 · 개화 문파
           </h1>
           <p style={{ margin: 0, color: '#8c8c8c', fontSize: 13 }}>문파 전용 관리 시스템</p>
         </div>
