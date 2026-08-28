@@ -30,6 +30,7 @@ public class RaidScheduler {
     private final DiscordNotifier notifier;
     private final WebPushService push;
     private final ChatService chat;
+    private final org.springframework.beans.factory.ObjectProvider<RaidService> raidServiceProvider;
 
     private static final DateTimeFormatter FMT = DateTimeFormatter.ofPattern("MM/dd(E) HH:mm", java.util.Locale.KOREAN);
 
@@ -89,6 +90,18 @@ public class RaidScheduler {
                 String label = raidLabel(r);
                 chat.saveSystem("✅ 레이드 자동 완료 처리 · " + label + " · " + r.getScheduledAt().format(FMT));
                 log.info("자동 완료 처리: raid={} {}", r.getId(), label);
+                // 자동 완료 시 같은 대상 다음 raid 자동 생성 (시간 미정)
+                try {
+                    RaidService rs = raidServiceProvider.getIfAvailable();
+                    if (rs != null) {
+                        Raid next = rs.createNextAfterDone(r);
+                        if (next != null) {
+                            notifier.syncRaidCard(next.getId(), DiscordNotifier.RaidTrigger.CREATED);
+                            chat.saveSystem("🆕 다음 레이드 자동 등록 · " + label + " · 시간 미정 (Discord 카드에서 설정)");
+                            log.info("자동 다음 레이드 생성: raid={} label={}", next.getId(), label);
+                        }
+                    }
+                } catch (Exception ex) { log.warn("자동 다음 레이드 생성 실패 raid {}: {}", r.getId(), ex.toString()); }
             } catch (Exception e) {
                 log.warn("자동 완료 실패 raid {}: {}", r.getId(), e.toString());
             }

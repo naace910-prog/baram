@@ -71,9 +71,9 @@ export const targetApi = {
 export const raidApi = {
   list: () => http.get<RaidListItem[]>('/raids').then((r) => r.data),
   get: (id: number) => http.get<RaidDetail>(`/raids/${id}`).then((r) => r.data),
-  create: (body: { category: RaidCategory; targetId?: number; scheduledAt: string; memo?: string }) =>
+  create: (body: { category: RaidCategory; targetId?: number; scheduledAt?: string | null; memo?: string }) =>
     http.post<RaidDetail>('/raids', body).then((r) => r.data),
-  update: (id: number, body: { category?: RaidCategory; targetId?: number; scheduledAt: string; status: RaidStatus; memo?: string }) =>
+  update: (id: number, body: { category?: RaidCategory; targetId?: number; scheduledAt?: string | null; status: RaidStatus; memo?: string }) =>
     http.put<RaidDetail>(`/raids/${id}`, body).then((r) => r.data),
   delete: (id: number) => http.delete(`/raids/${id}`).then(() => true),
   vote: (id: number, vote: VoteType) =>

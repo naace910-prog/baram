@@ -22,7 +22,7 @@ public class Raid {
     @Column(length = 20)
     private RaidCategory category;
 
-    @Column(nullable = false)
+    @Column
     private LocalDateTime scheduledAt;
 
     @Enumerated(EnumType.STRING)

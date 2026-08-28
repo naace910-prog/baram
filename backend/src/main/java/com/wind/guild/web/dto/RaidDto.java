@@ -13,13 +13,13 @@ public class RaidDto {
     public record CreateRequest(
             RaidCategory category,
             Long targetId,
-            @NotNull LocalDateTime scheduledAt,
+            LocalDateTime scheduledAt,  // nullable: 시간 미정 raid 지원
             String memo) {}
 
     public record UpdateRequest(
             RaidCategory category,
             Long targetId,
-            @NotNull LocalDateTime scheduledAt,
+            LocalDateTime scheduledAt,  // nullable
             @NotNull RaidStatus status,
             String memo) {}
 

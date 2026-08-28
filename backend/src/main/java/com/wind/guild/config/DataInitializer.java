@@ -81,6 +81,9 @@ public class DataInitializer implements CommandLineRunner {
                 "ALTER TABLE raid_loots ADD COLUMN IF NOT EXISTS distributed_by BIGINT");
         runSchemaFix("raid_loots_distributed_at",
                 "ALTER TABLE raid_loots ADD COLUMN IF NOT EXISTS distributed_at TIMESTAMP");
+        // v1.0.41: raid.scheduledAt null 허용 (시간 미정 상태 지원)
+        runSchemaFix("raids_scheduled_at_nullable",
+                "ALTER TABLE raids ALTER COLUMN scheduled_at DROP NOT NULL");
 
         if (memberRepository.count() == 0) {
             memberRepository.save(Member.builder()

@@ -42,7 +42,7 @@ export interface RaidListItem {
   targetName?: string | null
   targetIcon?: string | null
   dropItemName?: string | null
-  scheduledAt: string
+  scheduledAt: string | null
   status: RaidStatus
   memo?: string | null
   yesCount: number
@@ -66,7 +66,7 @@ export interface RaidDetail {
   targetName?: string | null
   targetIcon?: string | null
   dropItemName?: string | null
-  scheduledAt: string
+  scheduledAt: string | null
   status: RaidStatus
   memo?: string | null
   votes: RaidVote[]

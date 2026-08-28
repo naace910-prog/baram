@@ -222,7 +222,9 @@ public class DiscordBotService extends ListenerAdapter {
                 label = "레이드";
             }
             sb.append("── ").append(label).append(" · ")
-                    .append(r.getScheduledAt().format(DateTimeFormatter.ofPattern("MM/dd(E) HH:mm", java.util.Locale.KOREAN)))
+                    .append(r.getScheduledAt() != null
+                            ? r.getScheduledAt().format(DateTimeFormatter.ofPattern("MM/dd(E) HH:mm", java.util.Locale.KOREAN))
+                            : "⏳ 시간 미정")
                     .append(" ──\n");
 
             var attendees = attendeeRepository.findByRaidId(r.getId()).stream()
@@ -418,7 +420,9 @@ public class DiscordBotService extends ListenerAdapter {
                 label = "레이드";
             }
             sb.append("── ").append(label).append(" · ")
-                    .append(v.scheduledAt().format(DateTimeFormatter.ofPattern("MM/dd(E) HH:mm", java.util.Locale.KOREAN)))
+                    .append(v.scheduledAt() != null
+                            ? v.scheduledAt().format(DateTimeFormatter.ofPattern("MM/dd(E) HH:mm", java.util.Locale.KOREAN))
+                            : "⏳ 시간 미정")
                     .append("\n");
 
             var yes = v.votes().stream().filter(x -> x.vote() == VoteType.YES).map(RaidDto.VoteView::nickname).toList();
@@ -449,6 +453,30 @@ public class DiscordBotService extends ListenerAdapter {
     @Override
     public void onButtonInteraction(ButtonInteractionEvent e) {
         String id = e.getComponentId();
+        if (id.startsWith("raid:settime:")) {
+            if (!isMasterByDiscord(e.getUser().getId())) {
+                e.reply("문주/부문주만 시간 설정 가능합니다.").setEphemeral(true).queue();
+                return;
+            }
+            long raidId;
+            try { raidId = Long.parseLong(id.substring("raid:settime:".length())); }
+            catch (Exception ex) { e.reply("잘못된 버튼 ID").setEphemeral(true).queue(); return; }
+            // 기본값: 다음날 00:00 (사용자 요청)
+            LocalDateTime def = LocalDateTime.now().plusDays(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
+            String defStr = def.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"));
+            net.dv8tion.jda.api.interactions.components.text.TextInput dt =
+                    net.dv8tion.jda.api.interactions.components.text.TextInput.create("scheduledAt", "시간 (yyyy-MM-dd HH:mm)", net.dv8tion.jda.api.interactions.components.text.TextInputStyle.SHORT)
+                            .setPlaceholder("예: " + defStr)
+                            .setRequired(true).setMinLength(10).setMaxLength(16)
+                            .setValue(defStr)
+                            .build();
+            net.dv8tion.jda.api.interactions.modals.Modal modal =
+                    net.dv8tion.jda.api.interactions.modals.Modal.create("raid:settimemodal:" + raidId, "🕐 레이드 시간 설정")
+                            .addComponents(net.dv8tion.jda.api.interactions.components.ActionRow.of(dt))
+                            .build();
+            e.replyModal(modal).queue();
+            return;
+        }
         if (id.startsWith("raid:vote:")) {
             e.deferReply(true).queue();
             String[] parts = id.split(":");
@@ -747,6 +775,10 @@ public class DiscordBotService extends ListenerAdapter {
             handleDistributeModal(e, id);
             return;
         }
+        if (id.startsWith("raid:settimemodal:")) {
+            handleSetTimeModal(e, id);
+            return;
+        }
         if (!id.startsWith("loot:modal:")) return;
         e.deferReply(true).queue();
         try {
@@ -995,6 +1027,39 @@ public class DiscordBotService extends ListenerAdapter {
             e.getHook().sendMessage("✅ 분배 완료 · " + divisor + "명" + extLabel + " · 1인 " + String.format("%,d", per) + "전").setEphemeral(true).queue();
         } catch (Exception ex) {
             log.warn("distribute modal failed: {}", ex.toString());
+            try { e.getHook().sendMessage("에러: " + ex.getMessage()).setEphemeral(true).queue(); } catch (Exception ignore) {}
+        }
+    }
+
+    private void handleSetTimeModal(ModalInteractionEvent e, String id) {
+        e.deferReply(true).queue();
+        try {
+            if (!isMasterByDiscord(e.getUser().getId())) {
+                e.getHook().sendMessage("문주/부문주만 시간 설정 가능합니다").setEphemeral(true).queue();
+                return;
+            }
+            long raidId = Long.parseLong(id.substring("raid:settimemodal:".length()));
+            String txt = e.getValue("scheduledAt") != null ? e.getValue("scheduledAt").getAsString().trim() : "";
+            LocalDateTime dt;
+            try {
+                // yyyy-MM-dd HH:mm 형식
+                dt = LocalDateTime.parse(txt, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"));
+            } catch (Exception ex) {
+                e.getHook().sendMessage("시간 형식이 잘못됐습니다. 예: 2026-08-29 21:00").setEphemeral(true).queue();
+                return;
+            }
+            var opt = raidRepository.findById(raidId);
+            if (opt.isEmpty()) { e.getHook().sendMessage("레이드 없음").setEphemeral(true).queue(); return; }
+            var r = opt.get();
+            r.setScheduledAt(dt);
+            raidRepository.save(r);
+            DiscordNotifier n = notifier();
+            if (n != null) n.syncRaidCard(raidId, DiscordNotifier.RaidTrigger.STATUS);
+            ChatService cs = chatService();
+            if (cs != null) cs.saveSystem("🕐 [Discord] 레이드 시간 설정: " + dt.format(DateTimeFormatter.ofPattern("MM/dd(E) HH:mm", java.util.Locale.KOREAN)));
+            e.getHook().sendMessage("✅ 시간 설정 완료: " + dt.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))).setEphemeral(true).queue();
+        } catch (Exception ex) {
+            log.warn("set time modal failed: {}", ex.toString());
             try { e.getHook().sendMessage("에러: " + ex.getMessage()).setEphemeral(true).queue(); } catch (Exception ignore) {}
         }
     }

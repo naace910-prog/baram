@@ -63,7 +63,9 @@ public class RaidController {
         } else {
             label = "레이드"; icon = ""; dropItem = "";
         }
-        String time = r.getScheduledAt().format(DateTimeFormatter.ofPattern("MM/dd HH:mm"));
+        String time = r.getScheduledAt() != null
+                ? r.getScheduledAt().format(DateTimeFormatter.ofPattern("MM/dd HH:mm"))
+                : "⏳ 시간 미정";
         push.sendToAll("🆕 새 레이드: " + label, time + " · " + dropItem, "/raids/" + r.getId());
         chat.saveSystem("🆕 새 레이드 등록: " + icon + label + " · " + time
                 + (r.getMemo() != null && !r.getMemo().isBlank() ? "\n💬 " + r.getMemo() : ""),

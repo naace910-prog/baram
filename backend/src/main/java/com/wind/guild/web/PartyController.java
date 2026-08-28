@@ -32,10 +32,16 @@ public class PartyController {
             if (raid == null) return;
             var parties = service.listByRaid(raidId);
             StringBuilder sb = new StringBuilder();
-            sb.append("🛡️ 파티 편성 ").append(actionLabel).append(" · ")
-                    .append(raid.getTarget().getIcon() != null ? raid.getTarget().getIcon() + " " : "")
-                    .append(raid.getTarget().getName()).append(" · ")
-                    .append(raid.getScheduledAt().format(DateTimeFormatter.ofPattern("MM/dd HH:mm")));
+            sb.append("🛡️ 파티 편성 ").append(actionLabel).append(" · ");
+            if (raid.getTarget() != null) {
+                sb.append(raid.getTarget().getIcon() != null ? raid.getTarget().getIcon() + " " : "")
+                        .append(raid.getTarget().getName());
+            } else if (raid.getCategory() != null) {
+                sb.append(raid.getCategory().name());
+            }
+            sb.append(" · ").append(raid.getScheduledAt() != null
+                    ? raid.getScheduledAt().format(DateTimeFormatter.ofPattern("MM/dd HH:mm"))
+                    : "⏳ 시간 미정");
             java.util.Set<String> uniqueAll = new java.util.HashSet<>();
             for (var p : parties) {
                 sb.append("\n• ").append(p.channelType() == ChannelType.MAIN ? "본대" : "침략");

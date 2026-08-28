@@ -16,7 +16,13 @@ export default function DashboardPage() {
 
   const upcoming = raids
     .filter((r) => r.status === 'PLANNED')
-    .sort((a, b) => (dayjs(a.scheduledAt).isAfter(b.scheduledAt) ? 1 : -1))
+    .sort((a, b) => {
+      // 시간 미정 은 뒤로
+      if (!a.scheduledAt && !b.scheduledAt) return 0
+      if (!a.scheduledAt) return 1
+      if (!b.scheduledAt) return -1
+      return dayjs(a.scheduledAt).isAfter(b.scheduledAt) ? 1 : -1
+    })
   const past = raids.filter((r) => r.status === 'DONE')
 
   return (
@@ -87,7 +93,7 @@ export default function DashboardPage() {
                 <List.Item.Meta
                   title={<>
                     <Tag color="purple">{r.targetIcon ?? '🎯'} {r.targetName ?? (r.category === 'FANG' ? '어금니' : '레이드')}</Tag>
-                    {dayjs(r.scheduledAt).format('MM/DD(dd) HH:mm')}
+                    {r.scheduledAt ? dayjs(r.scheduledAt).format('MM/DD(dd) HH:mm') : <span style={{ color: '#faad14' }}>⏳ 시간 미정</span>}
                   </>}
                   description={<>드랍: {r.dropItemName ?? '-'} · 참가 {r.yesCount} / 불참 {r.noCount} / 미정 {r.maybeCount}</>}
                 />

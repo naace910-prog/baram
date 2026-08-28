@@ -256,7 +256,7 @@ public class DiscordNotifier {
         StringBuilder desc = new StringBuilder();
         desc.append("**🎯 ").append(label).append("** · ")
                 .append(dropItemName).append("\n")
-                .append("**📅 ").append(r.getScheduledAt().format(FMT)).append("**\n");
+                .append("**📅 ").append(r.getScheduledAt() != null ? r.getScheduledAt().format(FMT) : "⏳ 시간 미정 (하단 버튼으로 설정)").append("**\n");
         if (r.getMemo() != null && !r.getMemo().isBlank()) {
             desc.append("💬 ").append(r.getMemo()).append("\n");
         }
@@ -446,11 +446,19 @@ public class DiscordNotifier {
             }
             return rows;
         }
-        return List.of(ActionRow.of(
-                Button.success("raid:vote:" + r.getId() + ":YES", "참가"),
-                Button.danger("raid:vote:" + r.getId() + ":NO", "불참"),
-                Button.secondary("raid:vote:" + r.getId() + ":MAYBE", "미정"),
-                Button.link(siteLink, "상세보기")));
+        List<Button> voteRow = new ArrayList<>();
+        voteRow.add(Button.success("raid:vote:" + r.getId() + ":YES", "참가"));
+        voteRow.add(Button.danger("raid:vote:" + r.getId() + ":NO", "불참"));
+        voteRow.add(Button.secondary("raid:vote:" + r.getId() + ":MAYBE", "미정"));
+        voteRow.add(Button.link(siteLink, "상세보기"));
+        List<ActionRow> plannedRows = new ArrayList<>();
+        plannedRows.add(ActionRow.of(voteRow));
+        // 시간 미정 raid: [🕐 시간 입력] 버튼 추가 행
+        if (r.getScheduledAt() == null) {
+            plannedRows.add(ActionRow.of(
+                    Button.primary("raid:settime:" + r.getId(), "🕐 시간 입력")));
+        }
+        return plannedRows;
     }
 
     // ============================================================
@@ -569,7 +577,7 @@ public class DiscordNotifier {
                     : (r.getCategory() == RaidCategory.FANG ? "흑/묵/감/진룡 어금니" : "-");
             Map<String, Object> embed = Map.of(
                     "title", "🆕 새 레이드 · " + label,
-                    "description", "시간: " + r.getScheduledAt().format(FMT)
+                    "description", "시간: " + (r.getScheduledAt() != null ? r.getScheduledAt().format(FMT) : "⏳ 시간 미정")
                             + "\n드랍: " + dropItemName
                             + (r.getMemo() == null || r.getMemo().isBlank() ? "" : "\n메모: " + r.getMemo())
                             + "\n\n✅ " + yes + " · ❌ " + no + " · ❓ " + maybe

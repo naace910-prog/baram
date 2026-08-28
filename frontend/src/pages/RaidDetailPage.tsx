@@ -194,7 +194,7 @@ export default function RaidDetailPage() {
               : <span style={{ color: '#8c8c8c' }}>다종 (득템별 개별 몹)</span>}
           </Descriptions.Item>
           <Descriptions.Item label="드랍">{raid.dropItemName ?? (raid.category === 'FANG' ? '흑/묵/감/진룡 어금니 · 드랍 시 등록' : '-')}</Descriptions.Item>
-          <Descriptions.Item label="시간">{dayjs(raid.scheduledAt).format('YYYY-MM-DD(dd) HH:mm')}</Descriptions.Item>
+          <Descriptions.Item label="시간">{raid.scheduledAt ? dayjs(raid.scheduledAt).format('YYYY-MM-DD(dd) HH:mm') : <span style={{ color: '#faad14' }}>⏳ 시간 미정 (Discord 카드 [🕐 시간 입력] 또는 상단 편집)</span>}</Descriptions.Item>
           <Descriptions.Item label="상태">
             {isMaster(user) ? (
               <Segmented

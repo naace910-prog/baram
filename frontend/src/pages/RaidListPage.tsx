@@ -79,10 +79,11 @@ export default function RaidListPage() {
 function RaidCard({ raid: r, nickById, onOpen }: {
   raid: RaidListItem; nickById: Map<number, string>; onOpen: () => void
 }) {
-  const scheduled = dayjs(r.scheduledAt)
-  const isPast = scheduled.isBefore(dayjs())
-  const dayLabel = scheduled.format('MM/DD(dd)')
-  const timeLabel = scheduled.format('HH:mm')
+  const hasTime = !!r.scheduledAt
+  const scheduled = hasTime ? dayjs(r.scheduledAt) : dayjs()
+  const isPast = hasTime && scheduled.isBefore(dayjs())
+  const dayLabel = hasTime ? scheduled.format('MM/DD(dd)') : '미정'
+  const timeLabel = hasTime ? scheduled.format('HH:mm') : '⏳'
 
   const yesVoters = r.votes.filter(v => v.vote === 'YES')
   const noVoters = r.votes.filter(v => v.vote === 'NO')

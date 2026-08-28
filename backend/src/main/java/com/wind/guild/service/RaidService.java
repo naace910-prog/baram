@@ -132,13 +132,57 @@ public class RaidService {
         if (existing.isPresent()) {
             return existing.get();
         }
-        return raidRepository.save(Raid.builder()
+        Raid saved = raidRepository.save(Raid.builder()
                 .target(target)
                 .category(category)
                 .scheduledAt(scheduledAt)
                 .memo(req.memo())
                 .status(RaidStatus.PLANNED)
                 .build());
+        // 신규 레이드는 본대 파티 1개 자동 생성 (사용자 요청 · 매번 새로 만드는 수고 절약)
+        try {
+            partyRepository.save(RaidParty.builder()
+                    .raidId(saved.getId())
+                    .channelType(ChannelType.MAIN)
+                    .displayOrder(1)
+                    .build());
+        } catch (Exception ignored) {}
+        return saved;
+    }
+
+    /**
+     * 완료된 레이드와 같은 대상/카테고리로 새 레이드를 자동 생성.
+     * scheduledAt = null (사용자가 Discord [🕐 시간 입력] 이나 사이트에서 나중에 설정).
+     * 중복 방지: 이미 같은 대상+null 시각 이거나 미완료 raid 있으면 skip.
+     */
+    public Raid createNextAfterDone(Raid prev) {
+        RaidTarget target = prev.getTarget();
+        RaidCategory category = prev.getCategory();
+        if (category == null) return null;
+
+        // 이미 같은 target/category 로 미완료(PLANNED) raid 있으면 skip (스팸 방지)
+        List<Raid> planned = raidRepository.findByStatusOrderByScheduledAtAsc(RaidStatus.PLANNED);
+        for (Raid p : planned) {
+            boolean sameTarget = (target != null && p.getTarget() != null && target.getId().equals(p.getTarget().getId()))
+                    || (target == null && p.getTarget() == null && category == p.getCategory());
+            if (sameTarget) return null;
+        }
+
+        Raid next = raidRepository.save(Raid.builder()
+                .target(target)
+                .category(category)
+                .scheduledAt(null)  // 시간 미정 (Discord 카드에 [🕐 시간 입력] 버튼 노출)
+                .status(RaidStatus.PLANNED)
+                .build());
+        // 본대 파티 자동
+        try {
+            partyRepository.save(RaidParty.builder()
+                    .raidId(next.getId())
+                    .channelType(ChannelType.MAIN)
+                    .displayOrder(1)
+                    .build());
+        } catch (Exception ignored) {}
+        return next;
     }
 
     public Raid update(Long id, RaidDto.UpdateRequest req) {
@@ -149,11 +193,16 @@ public class RaidService {
             target = targetRepository.findById(req.targetId())
                     .orElseThrow(() -> new IllegalArgumentException("대상 없음: " + req.targetId()));
         }
+        RaidStatus prevStatus = r.getStatus();
         r.setTarget(target);
         if (req.category() != null) r.setCategory(req.category());
         r.setScheduledAt(req.scheduledAt());
         r.setStatus(req.status());
         r.setMemo(req.memo());
+        // PLANNED → DONE 전환 시 자동 다음 레이드 생성
+        if (prevStatus != RaidStatus.DONE && req.status() == RaidStatus.DONE) {
+            try { createNextAfterDone(r); } catch (Exception ignored) {}
+        }
         return r;
     }
 
