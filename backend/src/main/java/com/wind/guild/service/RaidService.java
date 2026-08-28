@@ -186,6 +186,11 @@ public class RaidService {
     }
 
     public Raid update(Long id, RaidDto.UpdateRequest req) {
+        return updateInternal(id, req).raid();
+    }
+
+    /** 자동 다음 레이드 정보까지 반환 (컨트롤러가 syncRaidCard 호출용). */
+    public UpdateResult updateInternal(Long id, RaidDto.UpdateRequest req) {
         Raid r = raidRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("레이드 없음: " + id));
         RaidTarget target = null;
@@ -199,12 +204,14 @@ public class RaidService {
         r.setScheduledAt(req.scheduledAt());
         r.setStatus(req.status());
         r.setMemo(req.memo());
-        // PLANNED → DONE 전환 시 자동 다음 레이드 생성
+        Raid nextRaid = null;
         if (prevStatus != RaidStatus.DONE && req.status() == RaidStatus.DONE) {
-            try { createNextAfterDone(r); } catch (Exception ignored) {}
+            try { nextRaid = createNextAfterDone(r); } catch (Exception ignored) {}
         }
-        return r;
+        return new UpdateResult(r, nextRaid);
     }
+
+    public record UpdateResult(Raid raid, Raid nextRaid) {}
 
     /** 레이드 + 관련 데이터 삭제. Discord 메시지 ID 리스트 반환 (raid card + 개별 loot cards). */
     public java.util.List<Long> delete(Long id) {

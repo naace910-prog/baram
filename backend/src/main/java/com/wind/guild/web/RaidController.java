@@ -75,8 +75,18 @@ public class RaidController {
 
     @PutMapping("/{id}")
     public RaidDto.DetailView update(@PathVariable Long id, @Valid @RequestBody RaidDto.UpdateRequest req) {
-        raidService.update(id, req);
+        var result = raidService.updateInternal(id, req);
         discord.syncRaidCard(id, DiscordNotifier.RaidTrigger.STATUS);
+        // 수동 완료 시 자동 생성된 다음 raid Discord 카드 발송 (스케줄러 경로와 동일 처리)
+        if (result.nextRaid() != null) {
+            discord.syncRaidCard(result.nextRaid().getId(), DiscordNotifier.RaidTrigger.CREATED);
+            try {
+                var next = result.nextRaid();
+                String label = next.getTarget() != null ? next.getTarget().getName()
+                        : (next.getCategory() != null ? next.getCategory().name() : "레이드");
+                chat.saveSystem("🆕 다음 레이드 자동 등록 · " + label + " · 시간 미정 (Discord 카드 [🕐 시간 입력] 으로 설정)");
+            } catch (Exception ignored) {}
+        }
         return raidService.get(id);
     }
 
