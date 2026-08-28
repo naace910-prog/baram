@@ -86,13 +86,21 @@ public class DiscordBotService extends ListenerAdapter {
             jda.awaitReady();
             log.info("Discord bot ready as {}", jda.getSelfUser().getAsTag());
             registerCommands();
-            // 서버 기동 완료 알림
+            // 서버 기동 완료 알림 (Discord 2000자 제한 → 초과 시 truncate)
             TextChannel ch = notifyChannel();
             if (ch != null) {
-                String msg = "🟢 **서버 기동 완료 " + com.wind.guild.config.AppVersion.VERSION + "** · "
+                String header = "🟢 **서버 기동 완료 " + com.wind.guild.config.AppVersion.VERSION + "** · "
                         + LocalDateTime.now().format(DateTimeFormatter.ofPattern("MM/dd HH:mm:ss"))
-                        + "\n\n**이번 배포 변경사항**\n" + com.wind.guild.config.AppVersion.CHANGELOG;
-                ch.sendMessage(msg).queue(null, err -> log.debug("boot notify send failed: {}", err.toString()));
+                        + "\n\n**이번 배포 변경사항**\n";
+                String body = com.wind.guild.config.AppVersion.CHANGELOG;
+                int MAX = 1900;
+                int room = MAX - header.length();
+                if (body.length() > room) body = body.substring(0, Math.max(0, room - 5)) + "\n...";
+                String msg = header + body;
+                ch.sendMessage(msg).queue(
+                        null,
+                        err -> log.warn("boot notify send failed: {}", err.toString())  // debug → warn (감지 용이)
+                );
             }
         } catch (Exception e) {
             log.error("Discord bot startup failed: {}", e.toString());
