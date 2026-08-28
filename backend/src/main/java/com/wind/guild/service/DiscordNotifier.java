@@ -131,18 +131,24 @@ public class DiscordNotifier {
                 var buttonsArr = buttons.toArray(new net.dv8tion.jda.api.interactions.components.LayoutComponent[0]);
 
                 Long targetRaidId = r.getId();
-                if (r.getDiscordMessageId() == null) {
+                // CREATED 는 항상 새 메시지 (재발송·최초등록 모두 안정 · edit path 의 async race 우회)
+                boolean forceNew = trigger == RaidTrigger.CREATED || r.getDiscordMessageId() == null;
+                if (forceNew) {
+                    log.info("syncRaidCard send NEW (raidId={}, trigger={}, chId={})", targetRaidId, trigger, ch.getId());
                     ch.sendMessageEmbeds(embed).setComponents(buttonsArr).queue(msg -> {
                         raidRepository.updateDiscordMessageId(targetRaidId, msg.getIdLong());
-                    }, err -> log.warn("raid card send failed: {}", err.toString()));
+                        log.info("syncRaidCard NEW ok (raidId={}, msgId={})", targetRaidId, msg.getIdLong());
+                    }, err -> log.warn("raid card send failed (raidId={}, trigger={}): {}", targetRaidId, trigger, err.toString()));
                 } else {
+                    log.info("syncRaidCard EDIT (raidId={}, trigger={}, msgId={})", targetRaidId, trigger, r.getDiscordMessageId());
                     ch.editMessageEmbedsById(r.getDiscordMessageId(), embed)
                             .setComponents(buttonsArr)
                             .queue(null, err -> {
-                                log.warn("raid card edit failed (fallback to new send): {}", err.toString());
+                                log.warn("raid card edit failed (fallback to new send · raidId={}): {}", targetRaidId, err.toString());
                                 ch.sendMessageEmbeds(embed).setComponents(buttonsArr).queue(m -> {
                                     raidRepository.updateDiscordMessageId(targetRaidId, m.getIdLong());
-                                });
+                                    log.info("syncRaidCard fallback NEW ok (raidId={}, msgId={})", targetRaidId, m.getIdLong());
+                                }, err2 -> log.warn("raid card fallback send failed (raidId={}): {}", targetRaidId, err2.toString()));
                             });
                 }
                 return;

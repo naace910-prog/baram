@@ -138,11 +138,9 @@ public class RaidController {
         if (!"MASTER".equals(role) && !"VICE".equals(role)) {
             throw new IllegalStateException("문주/부문주만 실행 가능합니다");
         }
-        // discordMessageId 초기화 → syncRaidCard 가 새 메시지 발송
-        raidRepo.findById(raidId).ifPresent(r -> {
-            r.setDiscordMessageId(null);
-            raidRepo.save(r);
-        });
+        // discordMessageId 초기화 (targeted update · @Async race 회피)
+        raidRepo.updateDiscordMessageId(raidId, null);
+        // CREATED trigger 는 syncRaidCard 내부에서 항상 새 메시지 발송 (edit path 우회)
         discord.syncRaidCard(raidId, DiscordNotifier.RaidTrigger.CREATED);
         return raidService.get(raidId);
     }
