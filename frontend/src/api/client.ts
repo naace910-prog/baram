@@ -103,6 +103,14 @@ export const adminApi = {
   resetLoots: () =>
     http.post<{ result: string; deletedShares: number; deletedLoots: number }>('/admin/reset-loots')
         .then((r) => r.data),
+  discordTest: () =>
+    http.post<{
+      discordEnabled: boolean
+      botReady: boolean
+      notifyChannelIdSet: boolean
+      notifyChannelReachable: boolean
+      testMessageAttempted: boolean
+    }>('/admin/discord-test').then((r) => r.data),
 }
 
 export const pushApi = {

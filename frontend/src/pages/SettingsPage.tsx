@@ -14,6 +14,22 @@ export default function SettingsPage() {
   const [nickname, setNickname] = useState(user?.nickname ?? '')
   const [saving, setSaving] = useState(false)
   const [resetting, setResetting] = useState(false)
+  const [diagLoading, setDiagLoading] = useState(false)
+  const [diag, setDiag] = useState<Awaited<ReturnType<typeof adminApi.discordTest>> | null>(null)
+
+  const runDiscordDiag = async () => {
+    setDiagLoading(true)
+    try {
+      const r = await adminApi.discordTest()
+      setDiag(r)
+      if (r.botReady && r.notifyChannelReachable) message.success('봇 정상 · 테스트 메시지 발송됨')
+      else message.warning('봇 미준비 · Render 재배포 필요할 수 있음')
+    } catch (e: any) {
+      message.error(e?.response?.data?.error ?? '진단 실패')
+    } finally {
+      setDiagLoading(false)
+    }
+  }
 
   const resetLoots = () => {
     modal.confirm({
@@ -137,6 +153,24 @@ export default function SettingsPage() {
           </Space>
         )}
       </Card>
+
+      {isMaster(user) && (
+        <Card title="🩺 Discord 봇 진단" style={{ marginBottom: 12 }}>
+          <div style={{ color: '#8c8c8c', fontSize: 12, marginBottom: 8 }}>
+            봇 연결 상태 확인 + 알림 채널에 테스트 메시지 발송
+          </div>
+          <Button loading={diagLoading} onClick={runDiscordDiag}>Discord 진단 실행</Button>
+          {diag && (
+            <div style={{ marginTop: 8, fontSize: 12 }}>
+              <div>Discord Enabled: <b>{String(diag.discordEnabled)}</b></div>
+              <div>Bot Ready: <b style={{ color: diag.botReady ? '#52c41a' : '#ff4d4f' }}>{String(diag.botReady)}</b></div>
+              <div>Notify Channel ID 설정: <b>{String(diag.notifyChannelIdSet)}</b></div>
+              <div>Notify Channel 도달 가능: <b style={{ color: diag.notifyChannelReachable ? '#52c41a' : '#ff4d4f' }}>{String(diag.notifyChannelReachable)}</b></div>
+              <div>테스트 메시지 발송: <b>{String(diag.testMessageAttempted)}</b></div>
+            </div>
+          )}
+        </Card>
+      )}
 
       {isMaster(user) && user?.role === 'MASTER' && (
         <Card

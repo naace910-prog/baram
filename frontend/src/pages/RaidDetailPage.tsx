@@ -2,9 +2,9 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Card, Button, Tag, Space, App as AntApp, Descriptions, Divider, Segmented,
-  Table, InputNumber, Input, Switch, Modal, Checkbox
+  Table, InputNumber, Input, Switch, Modal, Checkbox, DatePicker
 } from 'antd'
-import dayjs from 'dayjs'
+import dayjs, { Dayjs } from 'dayjs'
 import { useEffect, useState } from 'react'
 import { raidApi, lootApi, memberApi, targetApi } from '@/api/client'
 import { useAuth, isMaster } from '@/store/authStore'
@@ -34,8 +34,32 @@ export default function RaidDetailPage() {
   })
   const [bulkModal, setBulkModal] = useState(false)
   const [statusPending, setStatusPending] = useState(false)
+  const [timeModal, setTimeModal] = useState<{ open: boolean; value: Dayjs | null }>({ open: false, value: null })
 
   if (!raid) return null
+
+  const openTimeModal = () => {
+    const def = raid.scheduledAt ? dayjs(raid.scheduledAt) : dayjs().add(1, 'day').startOf('day')
+    setTimeModal({ open: true, value: def })
+  }
+  const saveTime = async () => {
+    if (!timeModal.value) { message.warning('시간을 선택해주세요'); return }
+    try {
+      const updated = await raidApi.update(raidId, {
+        category: raid.category ?? undefined,
+        targetId: raid.targetId ?? undefined,
+        scheduledAt: timeModal.value.format('YYYY-MM-DDTHH:mm:ss'),
+        status: raid.status,
+        memo: raid.memo ?? undefined,
+      })
+      qc.setQueryData(['raid', raidId], updated)
+      qc.invalidateQueries({ queryKey: ['raids'] })
+      message.success('시간 설정 완료')
+      setTimeModal({ open: false, value: null })
+    } catch (e: any) {
+      message.error(e?.response?.data?.error ?? '변경 실패')
+    }
+  }
 
   const myVote = raid.votes.find((v) => v.memberId === user?.memberId)?.vote
 
@@ -172,13 +196,16 @@ export default function RaidDetailPage() {
         <h2 style={{ margin: 0 }}>레이드 상세</h2>
         <Space wrap>
           {isMaster(user) && (
-            <Button onClick={forceCard}>🔄 카드 재발송</Button>
+            <Button size="small" onClick={openTimeModal}>🕐 시간 편집</Button>
+          )}
+          {isMaster(user) && (
+            <Button size="small" onClick={forceCard}>🔄 카드 재발송</Button>
           )}
           {isMaster(user) && raid.status === 'PLANNED' && (
-            <Button onClick={sendPre30}>🔔 리마인더 발송</Button>
+            <Button size="small" onClick={sendPre30}>🔔 리마인더</Button>
           )}
-          <Button onClick={() => nav(`/raids/${raidId}/parties`)}>파티 편성</Button>
-          {isMaster(user) && <Button danger onClick={removeRaid}>삭제</Button>}
+          <Button size="small" onClick={() => nav(`/raids/${raidId}/parties`)}>파티 편성</Button>
+          {isMaster(user) && <Button size="small" danger onClick={removeRaid}>삭제</Button>}
         </Space>
       </div>
 
@@ -369,6 +396,28 @@ export default function RaidDetailPage() {
         raidId={raidId}
         onSaved={() => qc.invalidateQueries({ queryKey: ['loots', raidId] })}
       />
+
+      <Modal
+        open={timeModal.open}
+        onCancel={() => setTimeModal({ open: false, value: null })}
+        onOk={saveTime}
+        title="🕐 레이드 시간 설정"
+        okText="저장"
+        cancelText="취소"
+        destroyOnClose
+      >
+        <div style={{ marginBottom: 8, color: '#8c8c8c', fontSize: 12 }}>
+          시간 미정 raid 는 다음날 00:00 기본값 · 필요시 변경
+        </div>
+        <DatePicker
+          value={timeModal.value}
+          onChange={(v) => setTimeModal((s) => ({ ...s, value: v }))}
+          showTime={{ format: 'HH:mm', minuteStep: 1 }}
+          format="YYYY-MM-DD HH:mm"
+          size="large"
+          style={{ width: '100%' }}
+        />
+      </Modal>
     </>
   )
 }

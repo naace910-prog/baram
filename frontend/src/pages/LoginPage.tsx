@@ -8,7 +8,7 @@ const LS_ACCOUNT = 'wg.lastAccount'
 const LS_PW = 'wg.lastPw'
 const LS_REMEMBER_PW = 'wg.rememberPw'
 const SS_AUTO_TRIED = 'wg.autoAuthTried'  // sessionStorage: 1회 자동 로그인만 시도
-const APP_VERSION = 'v1.0.42'
+const APP_VERSION = 'v1.0.43'
 
 function readSaved() {
   try {

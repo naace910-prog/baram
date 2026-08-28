@@ -115,9 +115,13 @@ public class DiscordNotifier {
     public void syncRaidCard(Long raidId, RaidTrigger trigger) {
         try {
             Raid r = raidRepository.findById(raidId).orElse(null);
-            if (r == null) return;
+            if (r == null) { log.warn("syncRaidCard skipped: raid {} not found", raidId); return; }
 
             DiscordBotService bot = bot();
+            boolean botReady = bot != null && bot.isReady();
+            if (!botReady) {
+                log.warn("syncRaidCard skipped: bot not ready (raidId={}, trigger={})", raidId, trigger);
+            }
             if (bot != null && bot.isReady()) {
                 TextChannel ch = bot.notifyChannel();
                 if (ch == null) return;
