@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import { Spin } from 'antd'
+import { LoadingOutlined } from '@ant-design/icons'
 
 let counter = 0
 const listeners = new Set<() => void>()
@@ -24,38 +26,45 @@ function useLoadingCount(): number {
 }
 
 /**
- * 상단 고정 얇은 progress bar. axios 요청 중일 때만 표시.
+ * 화면 중앙 빙글빙글 스피너. axios 요청 중일 때만 표시.
+ * 짧은 요청(150ms 이내)엔 표시하지 않아 깜빡임 방지.
  */
 export default function LoadingBar() {
   const n = useLoadingCount()
-  const active = n > 0
+  const [visible, setVisible] = useState(false)
+
+  useEffect(() => {
+    if (n > 0) {
+      const t = setTimeout(() => setVisible(true), 150)
+      return () => clearTimeout(t)
+    } else {
+      setVisible(false)
+    }
+  }, [n])
+
+  if (!visible) return null
+
   return (
-    <>
-      <style>{`
-        @keyframes wg-loading-slide {
-          0% { transform: translateX(-100%); }
-          100% { transform: translateX(400%); }
-        }
-      `}</style>
+    <div
+      style={{
+        position: 'fixed', inset: 0,
+        display: 'flex', justifyContent: 'center', alignItems: 'center',
+        zIndex: 9999, pointerEvents: 'none',
+        background: 'rgba(0, 0, 0, 0.08)',
+      }}
+    >
       <div
         style={{
-          position: 'fixed', top: 0, left: 0, right: 0, height: 3,
-          background: active ? 'rgba(124, 58, 237, 0.15)' : 'transparent',
-          zIndex: 9999, pointerEvents: 'none',
-          transition: 'background 200ms',
+          background: '#fff',
+          borderRadius: 12,
+          padding: '16px 20px',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+          display: 'flex', alignItems: 'center', gap: 12,
         }}
       >
-        {active && (
-          <div
-            style={{
-              width: '25%', height: '100%',
-              background: '#7c3aed',
-              boxShadow: '0 0 8px rgba(124,58,237,0.6)',
-              animation: 'wg-loading-slide 1.2s cubic-bezier(0.4, 0, 0.2, 1) infinite',
-            }}
-          />
-        )}
+        <Spin indicator={<LoadingOutlined style={{ fontSize: 28, color: '#7c3aed' }} spin />} />
+        <span style={{ color: '#595959', fontSize: 13 }}>불러오는 중…</span>
       </div>
-    </>
+    </div>
   )
 }
