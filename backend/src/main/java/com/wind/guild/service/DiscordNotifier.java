@@ -319,7 +319,8 @@ public class DiscordNotifier {
             Map<Long, String> nickMap) {
         LinkedHashMap<String, Integer> counts = new LinkedHashMap<>();
         for (RaidParty p : parties) {
-            for (RaidPartyMember m : partyMembersMap.get(p.getId())) {
+            List<RaidPartyMember> pmembers = partyMembersMap.getOrDefault(p.getId(), List.of());
+            for (RaidPartyMember m : pmembers) {
                 String name;
                 if (m.getMemberId() != null) {
                     name = nickMap.getOrDefault(m.getMemberId(), "#" + m.getMemberId());
@@ -342,7 +343,7 @@ public class DiscordNotifier {
         if (parties.isEmpty()) return;
 
         for (RaidParty p : parties) {
-            List<RaidPartyMember> ms = membersByParty.get(p.getId());
+            List<RaidPartyMember> ms = membersByParty.getOrDefault(p.getId(), List.of());
             String head = (p.getChannelType() == ChannelType.MAIN ? "본대" : "침략")
                     + (p.getChannelNumber() != null ? " · 채널 " + p.getChannelNumber() : "")
                     + (p.getMemo() != null && !p.getMemo().isBlank() ? " · " + p.getMemo() : "");
