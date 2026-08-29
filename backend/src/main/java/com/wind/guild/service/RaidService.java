@@ -4,6 +4,7 @@ import com.wind.guild.domain.*;
 import com.wind.guild.repository.*;
 import com.wind.guild.web.dto.RaidDto;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,6 +16,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional
@@ -158,14 +160,20 @@ public class RaidService {
     public Raid createNextAfterDone(Raid prev) {
         RaidTarget target = prev.getTarget();
         RaidCategory category = prev.getCategory();
-        if (category == null) return null;
+        if (category == null) {
+            log.info("createNextAfterDone skip: category=null (prev raid={})", prev.getId());
+            return null;
+        }
 
         // 이미 같은 target/category 로 미완료(PLANNED) raid 있으면 skip (스팸 방지)
         List<Raid> planned = raidRepository.findByStatusOrderByScheduledAtAsc(RaidStatus.PLANNED);
         for (Raid p : planned) {
             boolean sameTarget = (target != null && p.getTarget() != null && target.getId().equals(p.getTarget().getId()))
                     || (target == null && p.getTarget() == null && category == p.getCategory());
-            if (sameTarget) return null;
+            if (sameTarget) {
+                log.info("createNextAfterDone skip: already exists PLANNED raid={} same target/category (prev={})", p.getId(), prev.getId());
+                return null;
+            }
         }
 
         Raid next = raidRepository.save(Raid.builder()
@@ -182,6 +190,10 @@ public class RaidService {
                     .displayOrder(1)
                     .build());
         } catch (Exception ignored) {}
+        log.info("createNextAfterDone created: raid={} target={} category={} (prev={})",
+                next.getId(),
+                target != null ? target.getName() : "null",
+                category, prev.getId());
         return next;
     }
 
