@@ -160,8 +160,11 @@ public class PartyService {
         // 배치: raid 의 모든 vote 한 번에 조회 (기존: N번 findByRaidIdAndMemberId)
         Map<Long, RaidVote> byMember = new HashMap<>();
         for (RaidVote v : voteRepo.findByRaidId(raidId)) byMember.put(v.getMemberId(), v);
+        // 같은 memberId 가 여러 슬롯에 있을 때 unique constraint (raid_id, member_id) 위반 방지
+        Set<Long> processed = new HashSet<>();
         for (PartyDto.MemberEntry e : members) {
             if (e.memberId() == null) continue;
+            if (!processed.add(e.memberId())) continue;
             RaidVote v = byMember.get(e.memberId());
             if (v != null) {
                 if (v.getVote() != VoteType.YES) {
@@ -169,11 +172,12 @@ public class PartyService {
                     voteRepo.save(v);
                 }
             } else {
-                voteRepo.save(RaidVote.builder()
+                RaidVote saved = voteRepo.save(RaidVote.builder()
                         .raidId(raidId)
                         .memberId(e.memberId())
                         .vote(VoteType.YES)
                         .build());
+                byMember.put(e.memberId(), saved);
             }
         }
     }

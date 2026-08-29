@@ -3,15 +3,15 @@ package com.wind.guild.config;
 public final class AppVersion {
     private AppVersion() {}
 
-    public static final String VERSION = "v1.0.47";
+    public static final String VERSION = "v1.0.48";
 
     /**
      * 이번 배포 변경사항만 담을 것 (누적 X · Discord 메시지 2000자 제한).
      * 새 배포마다 이 값을 갈아엎기.
      */
     public static final String CHANGELOG =
-            "🎨 로딩 인디케이터 UX 개선\n" +
-            "  · 상단 얇은 progress bar → 화면 중앙 빙글빙글 스피너 (antd Spin)\n" +
-            "  · 150ms 이내 짧은 요청은 표시 안 함 (깜빡임 방지)\n" +
-            "  · axios 인터셉터 그대로 → 모든 API 요청에 자동 적용";
+            "🐛 파티 편성 중복 인원 저장 실패 fix\n" +
+            "  · autoYesVoteForPartyMembers: 같은 memberId 가 두 슬롯에 있고 아직 vote 없으면\n" +
+            "    2번째 loop 에서 새 RaidVote 재삽입 → unique(raid_id, member_id) 위반 500\n" +
+            "  · processed Set 로 dedup + save 후 map 에 반영";
 }
