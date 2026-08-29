@@ -160,7 +160,7 @@ public class DiscordNotifier {
                 sendRaidViaWebhook(r);
             }
         } catch (Exception e) {
-            log.warn("syncRaidCard error: {}", e.toString());
+            log.warn("syncRaidCard error (raidId={}, trigger={}): {}", raidId, trigger, e.toString(), e);
         }
     }
 
@@ -187,7 +187,7 @@ public class DiscordNotifier {
             if (firstOfCategory) syncRaidCardFresh(raidId, trigger);
             else syncRaidCard(raidId, trigger);
         } catch (Exception e) {
-            log.warn("syncRaidCardCategoryAware error: {}", e.toString());
+            log.warn("syncRaidCardCategoryAware error (raidId={}, trigger={}): {}", raidId, trigger, e.toString(), e);
         }
     }
 
@@ -213,11 +213,13 @@ public class DiscordNotifier {
             var buttons = buildRaidButtons(r, d);
             var buttonsArr = buttons.toArray(new net.dv8tion.jda.api.interactions.components.LayoutComponent[0]);
             Long raidId2 = r.getId();
+            log.info("syncRaidCardFresh send NEW (raidId={}, trigger={}, chId={})", raidId2, trigger, ch.getId());
             ch.sendMessageEmbeds(embed).setComponents(buttonsArr).queue(msg -> {
                 raidRepository.updateDiscordMessageId(raidId2, msg.getIdLong());
-            }, err -> log.warn("raid card fresh send failed: {}", err.toString()));
+                log.info("syncRaidCardFresh NEW ok (raidId={}, msgId={})", raidId2, msg.getIdLong());
+            }, err -> log.warn("raid card fresh send failed (raidId={}, trigger={}): {}", raidId2, trigger, err.toString()));
         } catch (Exception e) {
-            log.warn("syncRaidCardFresh error: {}", e.toString());
+            log.warn("syncRaidCardFresh error (raidId={}, trigger={}): {}", raidId, trigger, e.toString(), e);
         }
     }
 

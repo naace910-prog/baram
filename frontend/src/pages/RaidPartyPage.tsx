@@ -171,9 +171,12 @@ export default function RaidPartyPage() {
       // 저장 후 노쇼 방지: 파티 미편성 YES → NO 자동 변경
       const r = await partyApi.pruneNoShows(raidId)
       message.success('파티 저장 완료' + (r.changed > 0 ? ` · 미편성 ${r.changed}명 불참 처리` : ''))
+      setDirty(prev => { const n = new Set(prev); n.delete(partyId); return n })
       qc.invalidateQueries({ queryKey: ['parties', raidId] })
       qc.invalidateQueries({ queryKey: ['raid', raidId] })
-    } catch {}
+    } catch (e: any) {
+      message.error('파티 저장 실패: ' + (e?.response?.data?.error ?? e?.message ?? '알 수 없는 오류'))
+    }
   }
 
   const saveAll = async () => {
@@ -182,28 +185,32 @@ export default function RaidPartyPage() {
       await Promise.all([...dirty].map(pid => partyApi.replaceMembers(pid, draft[pid] ?? [])))
       const r = await partyApi.pruneNoShows(raidId)
       message.success(`${dirty.size}개 파티 저장` + (r.changed > 0 ? ` · 미편성 ${r.changed}명 불참 처리` : ''))
+      setDirty(new Set())
       qc.invalidateQueries({ queryKey: ['parties', raidId] })
       qc.invalidateQueries({ queryKey: ['raid', raidId] })
-    } catch {}
+    } catch (e: any) {
+      message.error('일부 파티 저장 실패: ' + (e?.response?.data?.error ?? e?.message ?? '알 수 없는 오류'))
+    }
   }
 
+  // 외부 인원 자유 입력 모달 (Enter=확인)
+  const [freeNameModal, setFreeNameModal] = useState<{ open: boolean; partyId?: number; role?: string; name: string }>({ open: false, name: '' })
   const addFreeName = (partyId: number, role: string) => {
-    let name = ''
-    modal.confirm({
-      title: '외부 인원 (자유 입력)',
-      content: (
-        <Input placeholder="닉네임" onChange={(e) => { name = e.target.value }} />
-      ),
-      onOk: () => {
-        if (!name.trim()) return
-        setDraft(prev => {
-          const next = { ...prev }
-          next[partyId] = [...(next[partyId] ?? []), { role, memberId: undefined, freeName: name.trim() }]
-          return next
-        })
-        markDirty(partyId)
-      },
+    setFreeNameModal({ open: true, partyId, role, name: '' })
+  }
+  const confirmFreeName = () => {
+    const name = freeNameModal.name.trim()
+    if (!name) { message.warning('닉네임을 입력하세요'); return }
+    const partyId = freeNameModal.partyId
+    const role = freeNameModal.role
+    if (partyId == null || role == null) return
+    setDraft(prev => {
+      const next = { ...prev }
+      next[partyId] = [...(next[partyId] ?? []), { role, memberId: undefined, freeName: name }]
+      return next
     })
+    markDirty(partyId)
+    setFreeNameModal({ open: false, name: '' })
   }
 
   const tryBack = () => {
@@ -341,11 +348,36 @@ export default function RaidPartyPage() {
         onClose={() => setCreating(false)}
         members={members}
         onCreate={async (v) => {
-          await partyApi.create(raidId, v)
-          qc.invalidateQueries({ queryKey: ['parties', raidId] })
-          message.success('파티 생성됨')
+          try {
+            await partyApi.create(raidId, v)
+            qc.invalidateQueries({ queryKey: ['parties', raidId] })
+            message.success('파티 생성됨')
+          } catch (e: any) {
+            message.error('파티 생성 실패: ' + (e?.response?.data?.error ?? e?.message ?? '알 수 없는 오류'))
+            throw e
+          }
         }}
       />
+
+      {/* 외부 인원 자유 입력 (Enter=확인) */}
+      <Modal
+        open={freeNameModal.open}
+        title="외부 인원 (자유 입력)"
+        onCancel={() => setFreeNameModal({ open: false, name: '' })}
+        onOk={confirmFreeName}
+        okText="추가"
+        cancelText="취소"
+        destroyOnClose
+      >
+        <Input
+          autoFocus
+          placeholder="닉네임 (Enter=추가)"
+          value={freeNameModal.name}
+          onChange={(e) => setFreeNameModal(s => ({ ...s, name: e.target.value }))}
+          onPressEnter={confirmFreeName}
+          maxLength={40}
+        />
+      </Modal>
 
       <Modal
         open={autoFill.open}
@@ -614,16 +646,21 @@ function PartyCreateModal({ open, onClose, members, onCreate }: {
 }) {
   const [form] = Form.useForm()
   useEffect(() => { if (open) form.resetFields() }, [open, form])
+  const submit = async () => {
+    try {
+      const v = await form.validateFields()
+      await onCreate(v)
+      onClose()
+    } catch { /* validation 실패 또는 onCreate 실패 — 상위에서 message 처리 */ }
+  }
   return (
     <Modal
       open={open} onCancel={onClose} title="새 파티" destroyOnClose
-      onOk={async () => {
-        const v = await form.validateFields()
-        await onCreate(v)
-        onClose()
-      }}
+      onOk={submit}
+      okText="생성"
+      cancelText="취소"
     >
-      <Form form={form} layout="vertical" initialValues={{ channelType: 'MAIN' }}>
+      <Form form={form} layout="vertical" initialValues={{ channelType: 'MAIN' }} onFinish={submit}>
         <Form.Item name="channelType" label="채널 타입" rules={[{ required: true }]}>
           <Select options={[{ value: 'MAIN', label: '본대' }, { value: 'INVADE', label: '침략' }]} />
         </Form.Item>
