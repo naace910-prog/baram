@@ -113,7 +113,13 @@ export const adminApi = {
       notifyChannelReachable: boolean
       cooldownRemainingSec: number
       testMessageAttempted: boolean
+      connectAttempts: number
+      connectLoopRunning: boolean
+      lastConnectAttemptAt: string | null
+      lastConnectError: string | null
     }>('/admin/discord-test').then((r) => r.data),
+  discordReconnect: () =>
+    http.post<{ result: string; botReady: boolean; jdaStatus: string }>('/admin/discord-reconnect').then((r) => r.data),
   discordClearCooldown: () =>
     http.post<{ clearedFromSec: number; cooldownRemainingSec: number }>('/admin/discord-clear-cooldown').then((r) => r.data),
   discordLogs: () =>

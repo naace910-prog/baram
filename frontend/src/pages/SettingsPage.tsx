@@ -33,6 +33,16 @@ export default function SettingsPage() {
     }
   }
 
+  const reconnectBot = async () => {
+    try {
+      const r = await adminApi.discordReconnect()
+      message.info(`재연결: ${r.result} (JDA: ${r.jdaStatus})`)
+      setTimeout(runDiscordDiag, 3000)
+    } catch (e: any) {
+      message.error(e?.response?.data?.error ?? '재연결 실패')
+    }
+  }
+
   const clearCooldown = async () => {
     try {
       const r = await adminApi.discordClearCooldown()
@@ -179,8 +189,11 @@ export default function SettingsPage() {
           <div style={{ color: '#8c8c8c', fontSize: 12, marginBottom: 8 }}>
             봇 연결 상태 확인 + 알림 채널에 테스트 메시지 발송 (cooldown 중이면 스킵)
           </div>
-          <Space>
+          <Space wrap>
             <Button loading={diagLoading} onClick={runDiscordDiag}>Discord 진단 실행</Button>
+            {diag && !diag.botReady && (
+              <Button type="primary" onClick={reconnectBot}>봇 재연결</Button>
+            )}
             {diag && diag.cooldownRemainingSec > 0 && user?.role === 'MASTER' && (
               <Button danger onClick={clearCooldown}>Cooldown 해제 ({diag.cooldownRemainingSec}s)</Button>
             )}
@@ -193,6 +206,17 @@ export default function SettingsPage() {
               <div>Notify Channel: <b style={{ color: diag.notifyChannelReachable ? '#52c41a' : '#ff4d4f' }}>{String(diag.notifyChannelReachable)}</b> (id 설정: {String(diag.notifyChannelIdSet)})</div>
               <div>Cooldown 남음: <b style={{ color: diag.cooldownRemainingSec > 0 ? '#ff4d4f' : '#52c41a' }}>{diag.cooldownRemainingSec}s</b></div>
               <div>테스트 메시지 발송 시도: <b>{String(diag.testMessageAttempted)}</b></div>
+              <div style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid #f0f0f0' }}>
+                연결 시도 <b>{diag.connectAttempts}</b>회 · 재시도 루프 {diag.connectLoopRunning ? '동작중' : '정지'}
+                {diag.lastConnectAttemptAt && <> · 마지막 {diag.lastConnectAttemptAt.substring(11, 19)}</>}
+              </div>
+              {diag.lastConnectError && (
+                <Alert
+                  type="error" showIcon style={{ marginTop: 6 }}
+                  message="봇 연결 실패 원인"
+                  description={<span style={{ fontSize: 11, wordBreak: 'break-all' }}>{diag.lastConnectError}</span>}
+                />
+              )}
             </div>
           )}
           {logs && (

@@ -58,7 +58,16 @@ public class DiscordBotService extends ListenerAdapter {
     private final ObjectProvider<ChatService> chatServiceProvider;
     private final ObjectProvider<LootService> lootServiceProvider;
 
-    private JDA jda;
+    private volatile JDA jda;
+
+    // 연결 실패 진단용 (설정 → Discord 진단 에서 노출)
+    private volatile String lastConnectError = null;
+    private volatile LocalDateTime lastConnectAttemptAt = null;
+    private volatile int connectAttempts = 0;
+    private volatile boolean connectLoopRunning = false;
+
+    /** 재시도 backoff (초). 마지막 값에서 고정 반복. Discord IDENTIFY 한도를 아끼려고 넉넉히. */
+    private static final int[] RETRY_BACKOFF_SEC = {60, 120, 300, 600, 900, 1800};
 
     private DiscordNotifier notifier() { return notifierProvider.getIfAvailable(); }
     private ChatService chatService() { return chatServiceProvider.getIfAvailable(); }
@@ -67,44 +76,114 @@ public class DiscordBotService extends ListenerAdapter {
     public void start() {
         if (!props.isEnabled() || props.getBotToken() == null || props.getBotToken().isBlank()) {
             log.info("Discord bot is disabled (set DISCORD_ENABLED=true and DISCORD_BOT_TOKEN to enable).");
+            lastConnectError = "disabled (DISCORD_ENABLED=false 또는 토큰 미설정)";
             return;
         }
-        // ⚠ 별도 스레드에서 초기화: JDA.awaitReady() 가 rate limit 등으로 오래 걸리면
-        // Spring Boot 부팅이 블록되어 Tomcat 이 포트에 바인딩되지 않는 버그 회피
-        Thread t = new Thread(this::connectInBackground, "discord-bot-init");
-        t.setDaemon(true);
-        t.start();
+        startConnectLoop();
     }
 
-    private void connectInBackground() {
+    /** 백그라운드 재시도 루프 시작 (이미 돌고 있으면 무시). */
+    public synchronized boolean startConnectLoop() {
+        if (connectLoopRunning) return false;
+        connectLoopRunning = true;
+        // ⚠ 별도 스레드: JDA.awaitReady() 가 rate limit 등으로 오래 걸려도
+        // Spring Boot 부팅/Tomcat 포트 바인딩을 막지 않도록
+        Thread t = new Thread(this::connectLoop, "discord-bot-init");
+        t.setDaemon(true);
+        t.start();
+        return true;
+    }
+
+    /**
+     * 성공할 때까지 backoff 재시도.
+     * 종전엔 1회 실패 = 봇 영구 사망 (Render 재배포 전까지) 이었음.
+     * Discord 는 부팅 시점 429(글로벌 차단·IDENTIFY 한도)로 build() 자체를 실패시킬 수 있다.
+     */
+    private void connectLoop() {
         try {
-            jda = JDABuilder.createDefault(props.getBotToken(),
+            while (!Thread.currentThread().isInterrupted()) {
+                if (isReady()) return;
+                connectAttempts++;
+                lastConnectAttemptAt = LocalDateTime.now();
+                if (tryConnectOnce()) {
+                    lastConnectError = null;
+                    log.info("Discord bot connected (attempt {})", connectAttempts);
+                    return;
+                }
+                int idx = Math.min(connectAttempts - 1, RETRY_BACKOFF_SEC.length - 1);
+                int waitSec = RETRY_BACKOFF_SEC[idx];
+                log.warn("Discord 연결 실패 (attempt {}) · {}초 뒤 재시도 · 원인: {}",
+                        connectAttempts, waitSec, lastConnectError);
+                Thread.sleep(waitSec * 1000L);
+            }
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+        } catch (Exception e) {
+            log.error("connectLoop 비정상 종료: {}", e.toString(), e);
+        } finally {
+            connectLoopRunning = false;
+        }
+    }
+
+    /** 1회 연결 시도. 성공 true. 실패 시 lastConnectError 세팅 후 false. */
+    private boolean tryConnectOnce() {
+        JDA built = null;
+        try {
+            built = JDABuilder.createDefault(props.getBotToken(),
                             GatewayIntent.GUILD_MESSAGES,
                             GatewayIntent.MESSAGE_CONTENT)
                     .addEventListeners(this)
                     .build();
-            jda.awaitReady();
-            log.info("Discord bot ready as {}", jda.getSelfUser().getAsTag());
+            built.awaitReady();
+            jda = built;
+            log.info("Discord bot ready as {}", built.getSelfUser().getAsTag());
             registerCommands();
-            // 서버 기동 완료 알림 (Discord 2000자 제한 → 초과 시 truncate)
-            TextChannel ch = notifyChannel();
-            if (ch != null) {
-                String header = "🟢 **서버 기동 완료 " + com.wind.guild.config.AppVersion.VERSION + "** · "
-                        + LocalDateTime.now().format(DateTimeFormatter.ofPattern("MM/dd HH:mm:ss"))
-                        + "\n\n**이번 배포 변경사항**\n";
-                String body = com.wind.guild.config.AppVersion.CHANGELOG;
-                int MAX = 1900;
-                int room = MAX - header.length();
-                if (body.length() > room) body = body.substring(0, Math.max(0, room - 5)) + "\n...";
-                String msg = header + body;
-                ch.sendMessage(msg).queue(
-                        null,
-                        err -> log.warn("boot notify send failed: {}", err.toString())  // debug → warn (감지 용이)
-                );
-            }
+            postBootNotice();
+            return true;
         } catch (Exception e) {
-            log.error("Discord bot startup failed: {}", e.toString());
+            lastConnectError = e.toString();
+            log.error("Discord bot startup failed (attempt {}): {}", connectAttempts, e.toString(), e);
+            // 반쯤 살아있는 인스턴스가 남으면 다음 시도에서 IDENTIFY 를 또 낭비하므로 정리
+            if (built != null) {
+                try { built.shutdownNow(); } catch (Exception ignored) {}
+            }
+            jda = null;
+            return false;
         }
+    }
+
+    private void postBootNotice() {
+        try {
+            TextChannel ch = notifyChannel();
+            if (ch == null) return;
+            String header = "🟢 **서버 기동 완료 " + com.wind.guild.config.AppVersion.VERSION + "** · "
+                    + LocalDateTime.now().format(DateTimeFormatter.ofPattern("MM/dd HH:mm:ss"))
+                    + "\n\n**이번 배포 변경사항**\n";
+            String body = com.wind.guild.config.AppVersion.CHANGELOG;
+            int MAX = 1900;
+            int room = MAX - header.length();
+            if (body.length() > room) body = body.substring(0, Math.max(0, room - 5)) + "\n...";
+            ch.sendMessage(header + body).queue(
+                    null,
+                    err -> log.warn("boot notify send failed: {}", err.toString())
+            );
+        } catch (Exception e) {
+            log.warn("postBootNotice error: {}", e.toString());
+        }
+    }
+
+    /** 진단용 상태 노출. */
+    public String lastConnectError() { return lastConnectError; }
+    public String lastConnectAttemptAt() { return lastConnectAttemptAt == null ? null : lastConnectAttemptAt.toString(); }
+    public int connectAttempts() { return connectAttempts; }
+    public boolean connectLoopRunning() { return connectLoopRunning; }
+
+    /** 수동 재연결 트리거 (Render 재배포 없이 봇 살리기). */
+    public synchronized String reconnectNow() {
+        if (isReady()) return "already connected";
+        if (connectLoopRunning) return "retry loop already running";
+        connectAttempts = 0;
+        return startConnectLoop() ? "retry loop started" : "failed to start";
     }
 
     private void registerCommands() {

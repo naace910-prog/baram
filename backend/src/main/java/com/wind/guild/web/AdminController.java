@@ -55,7 +55,23 @@ public class AdminController {
         out.put("notifyChannelReachable", chanReachable);
         out.put("cooldownRemainingSec", cooldownSec);
         out.put("testMessageAttempted", ready && chanReachable && cooldownSec == 0);
+        // 연결 실패 진단
+        out.put("connectAttempts", discordBot.connectAttempts());
+        out.put("connectLoopRunning", discordBot.connectLoopRunning());
+        out.put("lastConnectAttemptAt", discordBot.lastConnectAttemptAt());
+        out.put("lastConnectError", discordBot.lastConnectError());
         return out;
+    }
+
+    /** 봇 수동 재연결 (Render 재배포 없이). */
+    @PostMapping("/discord-reconnect")
+    public Map<String, Object> discordReconnect(HttpSession session) {
+        String role = (String) session.getAttribute(SessionKeys.MEMBER_ROLE);
+        if (!"MASTER".equals(role) && !"VICE".equals(role)) {
+            throw new IllegalStateException("문주/부문주만 실행 가능합니다");
+        }
+        String result = discordBot.reconnectNow();
+        return Map.of("result", result, "botReady", discordBot.isReady(), "jdaStatus", discordBot.status());
     }
 
     /** 429 cooldown 즉시 해제 (Discord 자체 ban 이 실제로 풀렸다고 확인된 경우만). */
