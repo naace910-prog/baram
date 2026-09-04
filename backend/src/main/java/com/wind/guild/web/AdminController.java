@@ -63,6 +63,45 @@ public class AdminController {
         return out;
     }
 
+    /**
+     * IP 레벨 차단 판별.
+     * https://discord.com/api/v10/gateway 는 인증이 전혀 필요 없는 엔드포인트다.
+     * 이게 429 면 봇토큰/OAuth 자격증명과 무관하게 **이 서버의 아웃바운드 IP** 가
+     * Discord(Cloudflare)에 의해 차단된 것 → 우리 코드로는 해결 불가.
+     * 200 이면 IP 는 멀쩡하므로 429 원인은 토큰/앱 단위로 좁혀진다.
+     */
+    @PostMapping("/discord-ip-check")
+    public Map<String, Object> discordIpCheck(HttpSession session) {
+        String role = (String) session.getAttribute(SessionKeys.MEMBER_ROLE);
+        if (!"MASTER".equals(role) && !"VICE".equals(role)) {
+            throw new IllegalStateException("문주/부문주만 실행 가능합니다");
+        }
+        java.util.LinkedHashMap<String, Object> out = new java.util.LinkedHashMap<>();
+        long t0 = System.currentTimeMillis();
+        try {
+            var rt = new org.springframework.web.client.RestTemplate();
+            var resp = rt.getForEntity("https://discord.com/api/v10/gateway", String.class);
+            out.put("httpStatus", resp.getStatusCode().value());
+            String b = resp.getBody();
+            out.put("body", b == null ? null : (b.length() > 300 ? b.substring(0, 300) : b));
+            out.put("verdict", "IP 정상 — 인증 없는 엔드포인트 응답 OK");
+        } catch (org.springframework.web.client.HttpStatusCodeException e) {
+            int sc = e.getStatusCode().value();
+            String body = e.getResponseBodyAsString();
+            out.put("httpStatus", sc);
+            out.put("body", body.length() > 300 ? body.substring(0, 300) : body);
+            out.put("verdict", sc == 429
+                    ? "⛔ IP 레벨 차단 확정 — 봇토큰/OAuth 와 무관. Render 아웃바운드 IP 가 Discord 에 차단됨"
+                    : "인증 없는 요청이 " + sc + " 로 실패");
+        } catch (Exception e) {
+            out.put("httpStatus", -1);
+            out.put("body", e.toString());
+            out.put("verdict", "요청 자체 실패 (네트워크/DNS)");
+        }
+        out.put("latencyMs", System.currentTimeMillis() - t0);
+        return out;
+    }
+
     /** 봇 수동 재연결 (Render 재배포 없이). */
     @PostMapping("/discord-reconnect")
     public Map<String, Object> discordReconnect(HttpSession session) {

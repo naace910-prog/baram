@@ -111,8 +111,19 @@ public class DiscordOAuthService {
         HttpHeaders th = new HttpHeaders();
         th.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
         HttpEntity<MultiValueMap<String, String>> req = new HttpEntity<>(form, th);
-        @SuppressWarnings("unchecked")
-        Map<String, Object> body = rest.postForObject("https://discord.com/api/oauth2/token", req, Map.class);
+        Map<String, Object> body;
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> b = rest.postForObject("https://discord.com/api/oauth2/token", req, Map.class);
+            body = b;
+        } catch (org.springframework.web.client.HttpStatusCodeException e) {
+            if (e.getStatusCode().value() == 429) {
+                // IP 레벨 Cloudflare 차단이면 봇/OAuth 가리지 않고 전부 429 가 된다
+                throw new IllegalStateException(
+                        "Discord 가 이 서버의 요청을 일시 차단했습니다 (429). 잠시 후 다시 시도해주세요.");
+            }
+            throw new IllegalStateException("Discord 토큰 발급 실패 (" + e.getStatusCode().value() + ")");
+        }
         if (body == null || !body.containsKey("access_token")) {
             throw new IllegalStateException("Discord 토큰 발급 실패");
         }

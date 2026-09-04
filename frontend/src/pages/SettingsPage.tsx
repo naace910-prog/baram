@@ -33,6 +33,23 @@ export default function SettingsPage() {
     }
   }
 
+  const [ipCheck, setIpCheck] = useState<Awaited<ReturnType<typeof adminApi.discordIpCheck>> | null>(null)
+  const [ipLoading, setIpLoading] = useState(false)
+  const runIpCheck = async () => {
+    setIpLoading(true)
+    try {
+      const r = await adminApi.discordIpCheck()
+      setIpCheck(r)
+      if (r.httpStatus === 429) message.error('IP 레벨 차단 확정')
+      else if (r.httpStatus === 200) message.success('IP 정상')
+      else message.warning(`예상 밖 응답: ${r.httpStatus}`)
+    } catch (e: any) {
+      message.error(e?.response?.data?.error ?? 'IP 체크 실패')
+    } finally {
+      setIpLoading(false)
+    }
+  }
+
   const reconnectBot = async () => {
     try {
       const r = await adminApi.discordReconnect()
@@ -198,7 +215,19 @@ export default function SettingsPage() {
               <Button danger onClick={clearCooldown}>Cooldown 해제 ({diag.cooldownRemainingSec}s)</Button>
             )}
             <Button onClick={loadLogs}>최근 로그</Button>
+            <Button loading={ipLoading} onClick={runIpCheck}>IP 차단 검사</Button>
           </Space>
+          {ipCheck && (
+            <Alert
+              style={{ marginTop: 8 }}
+              type={ipCheck.httpStatus === 200 ? 'success' : 'error'}
+              showIcon
+              message={`${ipCheck.verdict} (HTTP ${ipCheck.httpStatus} · ${ipCheck.latencyMs}ms)`}
+              description={ipCheck.body && (
+                <span style={{ fontSize: 11, wordBreak: 'break-all' }}>{ipCheck.body}</span>
+              )}
+            />
+          )}
           {diag && (
             <div style={{ marginTop: 8, fontSize: 12 }}>
               <div>JDA Status: <b>{diag.jdaStatus}</b> · Gateway Ping: <b>{diag.gatewayPingMs}ms</b></div>

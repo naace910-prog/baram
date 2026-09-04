@@ -46,7 +46,11 @@ public class DiscordNotifier {
     private final DiscordApiLogRepository apiLogRepository;
     private final RestTemplate rest = new RestTemplate();
 
-    /** Discord API 호출 결과를 DB 로그로 남김. 실패 시 예외는 삼킴 (로깅 자체가 앱을 죽이면 안됨). */
+    /**
+     * Discord API 호출 결과를 DB 로그로 남김.
+     * 로깅 실패가 앱을 죽이면 안 되므로 예외는 잡지만, 조용히 삼키지는 않는다.
+     * (조용히 삼키면 "0건" 이 '호출이 없었다' 인지 '로깅이 깨졌다' 인지 구분 불가)
+     */
     void logApi(String op, String kind, Long refId, String trigger, boolean success, Long msgId, Throwable err, long startMillis) {
         try {
             String errStr = null;
@@ -59,7 +63,9 @@ public class DiscordNotifier {
                     .success(success).discordMessageId(msgId).error(errStr)
                     .latencyMs(startMillis > 0 ? System.currentTimeMillis() - startMillis : null)
                     .build());
-        } catch (Exception ignored) {}
+        } catch (Exception e) {
+            log.warn("discord_api_logs 기록 실패 (op={}, kind={}, refId={}): {}", op, kind, refId, e.toString(), e);
+        }
     }
 
     private DiscordBotService bot() { return botProvider.getIfAvailable(); }
