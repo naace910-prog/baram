@@ -16,18 +16,38 @@ export default function SettingsPage() {
   const [resetting, setResetting] = useState(false)
   const [diagLoading, setDiagLoading] = useState(false)
   const [diag, setDiag] = useState<Awaited<ReturnType<typeof adminApi.discordTest>> | null>(null)
+  const [logs, setLogs] = useState<Awaited<ReturnType<typeof adminApi.discordLogs>> | null>(null)
 
   const runDiscordDiag = async () => {
     setDiagLoading(true)
     try {
       const r = await adminApi.discordTest()
       setDiag(r)
-      if (r.botReady && r.notifyChannelReachable) message.success('봇 정상 · 테스트 메시지 발송됨')
-      else message.warning('봇 미준비 · Render 재배포 필요할 수 있음')
+      if (r.cooldownRemainingSec > 0) message.warning(`429 cooldown 중 · ${r.cooldownRemainingSec}초 남음`)
+      else if (r.botReady && r.notifyChannelReachable) message.success('봇 정상 · 테스트 메시지 발송됨')
+      else message.warning(`봇 미준비 (JDA: ${r.jdaStatus})`)
     } catch (e: any) {
       message.error(e?.response?.data?.error ?? '진단 실패')
     } finally {
       setDiagLoading(false)
+    }
+  }
+
+  const clearCooldown = async () => {
+    try {
+      const r = await adminApi.discordClearCooldown()
+      message.success(`cooldown 해제 (${r.clearedFromSec}s → 0s)`)
+      setDiag(d => d ? { ...d, cooldownRemainingSec: 0 } : d)
+    } catch (e: any) {
+      message.error(e?.response?.data?.error ?? '해제 실패')
+    }
+  }
+
+  const loadLogs = async () => {
+    try {
+      setLogs(await adminApi.discordLogs())
+    } catch (e: any) {
+      message.error(e?.response?.data?.error ?? '로그 조회 실패')
     }
   }
 
@@ -157,16 +177,34 @@ export default function SettingsPage() {
       {isMaster(user) && (
         <Card title="🩺 Discord 봇 진단" style={{ marginBottom: 12 }}>
           <div style={{ color: '#8c8c8c', fontSize: 12, marginBottom: 8 }}>
-            봇 연결 상태 확인 + 알림 채널에 테스트 메시지 발송
+            봇 연결 상태 확인 + 알림 채널에 테스트 메시지 발송 (cooldown 중이면 스킵)
           </div>
-          <Button loading={diagLoading} onClick={runDiscordDiag}>Discord 진단 실행</Button>
+          <Space>
+            <Button loading={diagLoading} onClick={runDiscordDiag}>Discord 진단 실행</Button>
+            {diag && diag.cooldownRemainingSec > 0 && user?.role === 'MASTER' && (
+              <Button danger onClick={clearCooldown}>Cooldown 해제 ({diag.cooldownRemainingSec}s)</Button>
+            )}
+            <Button onClick={loadLogs}>최근 로그</Button>
+          </Space>
           {diag && (
             <div style={{ marginTop: 8, fontSize: 12 }}>
-              <div>Discord Enabled: <b>{String(diag.discordEnabled)}</b></div>
+              <div>JDA Status: <b>{diag.jdaStatus}</b> · Gateway Ping: <b>{diag.gatewayPingMs}ms</b></div>
               <div>Bot Ready: <b style={{ color: diag.botReady ? '#52c41a' : '#ff4d4f' }}>{String(diag.botReady)}</b></div>
-              <div>Notify Channel ID 설정: <b>{String(diag.notifyChannelIdSet)}</b></div>
-              <div>Notify Channel 도달 가능: <b style={{ color: diag.notifyChannelReachable ? '#52c41a' : '#ff4d4f' }}>{String(diag.notifyChannelReachable)}</b></div>
-              <div>테스트 메시지 발송: <b>{String(diag.testMessageAttempted)}</b></div>
+              <div>Notify Channel: <b style={{ color: diag.notifyChannelReachable ? '#52c41a' : '#ff4d4f' }}>{String(diag.notifyChannelReachable)}</b> (id 설정: {String(diag.notifyChannelIdSet)})</div>
+              <div>Cooldown 남음: <b style={{ color: diag.cooldownRemainingSec > 0 ? '#ff4d4f' : '#52c41a' }}>{diag.cooldownRemainingSec}s</b></div>
+              <div>테스트 메시지 발송 시도: <b>{String(diag.testMessageAttempted)}</b></div>
+            </div>
+          )}
+          {logs && (
+            <div style={{ marginTop: 12, fontSize: 12 }}>
+              <div>최근 1시간 총 {logs.total1h}건 · 실패 <b style={{ color: logs.fail1h > 0 ? '#ff4d4f' : '#52c41a' }}>{logs.fail1h}</b>건</div>
+              <div style={{ maxHeight: 300, overflow: 'auto', marginTop: 6, border: '1px solid #f0f0f0', borderRadius: 4, padding: 4 }}>
+                {logs.recent100.map(l => (
+                  <div key={l.id} style={{ padding: '2px 4px', borderBottom: '1px dashed #f5f5f5', color: l.success ? '#333' : '#ff4d4f' }}>
+                    #{l.id} {l.createdAt.substring(11, 19)} {l.op}/{l.kind} ref={l.refId ?? '-'} {l.trigger ?? ''} {l.success ? '✓' : '✗'} {l.latencyMs ?? '-'}ms {l.error ? '· ' + l.error.substring(0, 80) : ''}
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </Card>

@@ -43,7 +43,24 @@ public class DiscordNotifier {
     private final RaidPartyMemberRepository partyMemberRepository;
     private final MemberRepository memberRepository;
     private final RaidTargetRepository targetRepository;
+    private final DiscordApiLogRepository apiLogRepository;
     private final RestTemplate rest = new RestTemplate();
+
+    /** Discord API 호출 결과를 DB 로그로 남김. 실패 시 예외는 삼킴 (로깅 자체가 앱을 죽이면 안됨). */
+    void logApi(String op, String kind, Long refId, String trigger, boolean success, Long msgId, Throwable err, long startMillis) {
+        try {
+            String errStr = null;
+            if (err != null) {
+                String e = err.toString();
+                errStr = e.length() > 500 ? e.substring(0, 500) : e;
+            }
+            apiLogRepository.save(DiscordApiLog.builder()
+                    .op(op).kind(kind).refId(refId).trigger(trigger)
+                    .success(success).discordMessageId(msgId).error(errStr)
+                    .latencyMs(startMillis > 0 ? System.currentTimeMillis() - startMillis : null)
+                    .build());
+        } catch (Exception ignored) {}
+    }
 
     private DiscordBotService bot() { return botProvider.getIfAvailable(); }
 
@@ -53,6 +70,10 @@ public class DiscordNotifier {
 
     private boolean inCooldown() { return System.currentTimeMillis() < globalCooldownUntilMillis; }
     private long cooldownRemainingSec() { return Math.max(0, (globalCooldownUntilMillis - System.currentTimeMillis()) / 1000); }
+
+    /** 진단용 - 외부 노출. */
+    public long getCooldownRemainingSec() { return cooldownRemainingSec(); }
+    public void clearCooldown() { globalCooldownUntilMillis = 0; }
 
     /** JDA 에러 콜백에서 429 감지 시 호출. 이후 10분간 모든 outbound 스킵. */
     static void noteRateLimitError(Throwable err) {
@@ -151,24 +172,40 @@ public class DiscordNotifier {
                 var buttonsArr = buttons.toArray(new net.dv8tion.jda.api.interactions.components.LayoutComponent[0]);
 
                 Long targetRaidId = r.getId();
+                String trg = trigger.name();
                 // CREATED 는 항상 새 메시지 (재발송·최초등록 모두 안정 · edit path 의 async race 우회)
                 boolean forceNew = trigger == RaidTrigger.CREATED || r.getDiscordMessageId() == null;
                 if (forceNew) {
+                    long t0 = System.currentTimeMillis();
                     log.info("syncRaidCard send NEW (raidId={}, trigger={}, chId={})", targetRaidId, trigger, ch.getId());
                     ch.sendMessageEmbeds(embed).setComponents(buttonsArr).queue(msg -> {
                         raidRepository.updateDiscordMessageId(targetRaidId, msg.getIdLong());
                         log.info("syncRaidCard NEW ok (raidId={}, msgId={})", targetRaidId, msg.getIdLong());
-                    }, err -> { noteRateLimitError(err); log.warn("raid card send failed (raidId={}, trigger={}): {}", targetRaidId, trigger, err.toString()); });
+                        logApi("send", "raidCard", targetRaidId, trg, true, msg.getIdLong(), null, t0);
+                    }, err -> {
+                        noteRateLimitError(err);
+                        log.warn("raid card send failed (raidId={}, trigger={}): {}", targetRaidId, trigger, err.toString());
+                        logApi("send", "raidCard", targetRaidId, trg, false, null, err, t0);
+                    });
                 } else {
+                    long t0 = System.currentTimeMillis();
                     log.info("syncRaidCard EDIT (raidId={}, trigger={}, msgId={})", targetRaidId, trigger, r.getDiscordMessageId());
                     ch.editMessageEmbedsById(r.getDiscordMessageId(), embed)
                             .setComponents(buttonsArr)
-                            .queue(null, err -> {
+                            .queue(ok -> logApi("edit", "raidCard", targetRaidId, trg, true, r.getDiscordMessageId(), null, t0),
+                                    err -> {
                                 log.warn("raid card edit failed (fallback to new send · raidId={}): {}", targetRaidId, err.toString());
+                                logApi("edit", "raidCard", targetRaidId, trg, false, r.getDiscordMessageId(), err, t0);
+                                long t1 = System.currentTimeMillis();
                                 ch.sendMessageEmbeds(embed).setComponents(buttonsArr).queue(m -> {
                                     raidRepository.updateDiscordMessageId(targetRaidId, m.getIdLong());
                                     log.info("syncRaidCard fallback NEW ok (raidId={}, msgId={})", targetRaidId, m.getIdLong());
-                                }, err2 -> { noteRateLimitError(err2); log.warn("raid card fallback send failed (raidId={}): {}", targetRaidId, err2.toString()); });
+                                    logApi("send", "raidCardFallback", targetRaidId, trg, true, m.getIdLong(), null, t1);
+                                }, err2 -> {
+                                    noteRateLimitError(err2);
+                                    log.warn("raid card fallback send failed (raidId={}): {}", targetRaidId, err2.toString());
+                                    logApi("send", "raidCardFallback", targetRaidId, trg, false, null, err2, t1);
+                                });
                             });
                 }
                 return;
@@ -238,11 +275,18 @@ public class DiscordNotifier {
             var buttons = buildRaidButtons(r, d);
             var buttonsArr = buttons.toArray(new net.dv8tion.jda.api.interactions.components.LayoutComponent[0]);
             Long raidId2 = r.getId();
+            String trg2 = trigger.name();
+            long t0 = System.currentTimeMillis();
             log.info("syncRaidCardFresh send NEW (raidId={}, trigger={}, chId={})", raidId2, trigger, ch.getId());
             ch.sendMessageEmbeds(embed).setComponents(buttonsArr).queue(msg -> {
                 raidRepository.updateDiscordMessageId(raidId2, msg.getIdLong());
                 log.info("syncRaidCardFresh NEW ok (raidId={}, msgId={})", raidId2, msg.getIdLong());
-            }, err -> { noteRateLimitError(err); log.warn("raid card fresh send failed (raidId={}, trigger={}): {}", raidId2, trigger, err.toString()); });
+                logApi("send", "raidCardFresh", raidId2, trg2, true, msg.getIdLong(), null, t0);
+            }, err -> {
+                noteRateLimitError(err);
+                log.warn("raid card fresh send failed (raidId={}, trigger={}): {}", raidId2, trigger, err.toString());
+                logApi("send", "raidCardFresh", raidId2, trg2, false, null, err, t0);
+            });
         } catch (Exception e) {
             log.warn("syncRaidCardFresh error (raidId={}, trigger={}): {}", raidId, trigger, e.toString(), e);
         }
@@ -521,12 +565,26 @@ public class DiscordNotifier {
 
             if (l.getDiscordMessageId() == null) {
                 final Long lootIdF = lootId;
+                long t0 = System.currentTimeMillis();
                 ch.sendMessageEmbeds(embed).queue(msg -> {
                     lootRepository.updateDiscordMessageId(lootIdF, msg.getIdLong());
-                }, err -> { noteRateLimitError(err); log.warn("loot card send failed: {}", err.toString()); });
+                    logApi("send", "lootCard", lootIdF, trigger.name(), true, msg.getIdLong(), null, t0);
+                }, err -> {
+                    noteRateLimitError(err);
+                    log.warn("loot card send failed: {}", err.toString());
+                    logApi("send", "lootCard", lootIdF, trigger.name(), false, null, err, t0);
+                });
             } else {
-                ch.editMessageEmbedsById(l.getDiscordMessageId(), embed).queue(null,
-                        err -> { noteRateLimitError(err); log.warn("loot card edit failed: {}", err.toString()); });
+                final Long lootIdF2 = lootId;
+                final Long msgIdF = l.getDiscordMessageId();
+                long t0 = System.currentTimeMillis();
+                ch.editMessageEmbedsById(msgIdF, embed).queue(
+                        ok -> logApi("edit", "lootCard", lootIdF2, trigger.name(), true, msgIdF, null, t0),
+                        err -> {
+                            noteRateLimitError(err);
+                            log.warn("loot card edit failed: {}", err.toString());
+                            logApi("edit", "lootCard", lootIdF2, trigger.name(), false, msgIdF, err, t0);
+                        });
             }
         } catch (Exception e) {
             log.warn("syncLootCard error: {}", e.toString());
@@ -663,7 +721,13 @@ public class DiscordNotifier {
             TextChannel ch = b.notifyChannel();
             if (ch == null || content == null || content.isBlank()) return;
             String msg = content.length() > 1900 ? content.substring(0, 1897) + "..." : content;
-            ch.sendMessage(msg).queue(null, err -> { noteRateLimitError(err); log.debug("alert send failed: {}", err.toString()); });
+            long t0 = System.currentTimeMillis();
+            ch.sendMessage(msg).queue(sent -> logApi("send", "alert", null, null, true, sent.getIdLong(), null, t0),
+                    err -> {
+                        noteRateLimitError(err);
+                        log.debug("alert send failed: {}", err.toString());
+                        logApi("send", "alert", null, null, false, null, err, t0);
+                    });
         } catch (Exception e) {
             log.debug("postAlertMessage error: {}", e.toString());
         }
@@ -700,11 +764,16 @@ public class DiscordNotifier {
             var buttons = buildRaidButtons(r);
             var buttonsArr = buttons.toArray(new net.dv8tion.jda.api.interactions.components.LayoutComponent[0]);
             Long raidId2 = r.getId();
+            long t0 = System.currentTimeMillis();
             ch.sendMessage(content).setEmbeds(embed).setComponents(buttonsArr)
                     .queue(msg -> {
-                        // targeted update (다른 필드 race 방지 · pre30Sent 반복 발송 버그 fix)
                         raidRepository.updateDiscordMessageId(raidId2, msg.getIdLong());
-                    }, err -> { noteRateLimitError(err); log.debug("pre30 fresh send failed: {}", err.toString()); });
+                        logApi("send", "raidPre30", raidId2, "PRE30", true, msg.getIdLong(), null, t0);
+                    }, err -> {
+                        noteRateLimitError(err);
+                        log.debug("pre30 fresh send failed: {}", err.toString());
+                        logApi("send", "raidPre30", raidId2, "PRE30", false, null, err, t0);
+                    });
         } catch (Exception e) {
             log.debug("postRaidPre30Fresh error: {}", e.toString());
         }

@@ -130,6 +130,8 @@ public class DiscordBotService extends ListenerAdapter {
     }
 
     public boolean isReady() { return jda != null && jda.getStatus() == JDA.Status.CONNECTED; }
+    public String status() { return jda == null ? "null" : jda.getStatus().name(); }
+    public long gatewayPing() { return jda == null ? -1 : jda.getGatewayPing(); }
 
     public TextChannel notifyChannel() {
         if (!isReady() || props.getNotifyChannelId() == null || props.getNotifyChannelId().isBlank()) return null;

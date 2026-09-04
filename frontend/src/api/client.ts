@@ -106,11 +106,21 @@ export const adminApi = {
   discordTest: () =>
     http.post<{
       discordEnabled: boolean
+      jdaStatus: string
       botReady: boolean
+      gatewayPingMs: number
       notifyChannelIdSet: boolean
       notifyChannelReachable: boolean
+      cooldownRemainingSec: number
       testMessageAttempted: boolean
     }>('/admin/discord-test').then((r) => r.data),
+  discordClearCooldown: () =>
+    http.post<{ clearedFromSec: number; cooldownRemainingSec: number }>('/admin/discord-clear-cooldown').then((r) => r.data),
+  discordLogs: () =>
+    http.get<{
+      total1h: number; fail1h: number
+      recent100: Array<{ id: number; createdAt: string; op: string; kind: string; refId: number | null; trigger: string | null; success: boolean; discordMsgId: number | null; latencyMs: number | null; error: string | null }>
+    }>('/admin/discord-logs').then((r) => r.data),
 }
 
 export const pushApi = {
