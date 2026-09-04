@@ -47,6 +47,21 @@ public class DiscordNotifier {
 
     private DiscordBotService bot() { return botProvider.getIfAvailable(); }
 
+    // Discord 글로벌 429 감지 시 이 시각까지 모든 outbound 스킵 (재쇄도로 ban 연장 방지)
+    private static volatile long globalCooldownUntilMillis = 0;
+    private static final long COOLDOWN_MS_ON_429 = 10 * 60 * 1000L; // 10분
+
+    private boolean inCooldown() { return System.currentTimeMillis() < globalCooldownUntilMillis; }
+    private long cooldownRemainingSec() { return Math.max(0, (globalCooldownUntilMillis - System.currentTimeMillis()) / 1000); }
+
+    /** JDA 에러 콜백에서 429 감지 시 호출. 이후 10분간 모든 outbound 스킵. */
+    static void noteRateLimitError(Throwable err) {
+        String s = err == null ? "" : err.toString();
+        if (s.contains("429") || s.toLowerCase().contains("rate limit") || s.toLowerCase().contains("too many requests")) {
+            globalCooldownUntilMillis = System.currentTimeMillis() + COOLDOWN_MS_ON_429;
+        }
+    }
+
     public enum RaidTrigger { CREATED, VOTE, ATTENDEES, PARTY, PRE30, STATUS, LOOT, DIST }
     public enum LootTrigger { DISTRIBUTED, PAID_CHANGED, PRICE_CHANGED }
 
@@ -114,6 +129,11 @@ public class DiscordNotifier {
     @org.springframework.scheduling.annotation.Async("discordExecutor")
     public void syncRaidCard(Long raidId, RaidTrigger trigger) {
         try {
+            if (inCooldown()) {
+                log.warn("syncRaidCard skipped (Discord 429 cooldown · {}s 남음, raidId={}, trigger={})",
+                        cooldownRemainingSec(), raidId, trigger);
+                return;
+            }
             Raid r = raidRepository.findById(raidId).orElse(null);
             if (r == null) { log.warn("syncRaidCard skipped: raid {} not found", raidId); return; }
 
@@ -138,7 +158,7 @@ public class DiscordNotifier {
                     ch.sendMessageEmbeds(embed).setComponents(buttonsArr).queue(msg -> {
                         raidRepository.updateDiscordMessageId(targetRaidId, msg.getIdLong());
                         log.info("syncRaidCard NEW ok (raidId={}, msgId={})", targetRaidId, msg.getIdLong());
-                    }, err -> log.warn("raid card send failed (raidId={}, trigger={}): {}", targetRaidId, trigger, err.toString()));
+                    }, err -> { noteRateLimitError(err); log.warn("raid card send failed (raidId={}, trigger={}): {}", targetRaidId, trigger, err.toString()); });
                 } else {
                     log.info("syncRaidCard EDIT (raidId={}, trigger={}, msgId={})", targetRaidId, trigger, r.getDiscordMessageId());
                     ch.editMessageEmbedsById(r.getDiscordMessageId(), embed)
@@ -148,7 +168,7 @@ public class DiscordNotifier {
                                 ch.sendMessageEmbeds(embed).setComponents(buttonsArr).queue(m -> {
                                     raidRepository.updateDiscordMessageId(targetRaidId, m.getIdLong());
                                     log.info("syncRaidCard fallback NEW ok (raidId={}, msgId={})", targetRaidId, m.getIdLong());
-                                }, err2 -> log.warn("raid card fallback send failed (raidId={}): {}", targetRaidId, err2.toString()));
+                                }, err2 -> { noteRateLimitError(err2); log.warn("raid card fallback send failed (raidId={}): {}", targetRaidId, err2.toString()); });
                             });
                 }
                 return;
@@ -199,6 +219,11 @@ public class DiscordNotifier {
     @org.springframework.scheduling.annotation.Async("discordExecutor")
     public void syncRaidCardFresh(Long raidId, RaidTrigger trigger) {
         try {
+            if (inCooldown()) {
+                log.warn("syncRaidCardFresh skipped (Discord 429 cooldown · {}s 남음, raidId={}, trigger={})",
+                        cooldownRemainingSec(), raidId, trigger);
+                return;
+            }
             Raid r = raidRepository.findById(raidId).orElse(null);
             if (r == null) return;
             DiscordBotService bot = bot();
@@ -217,7 +242,7 @@ public class DiscordNotifier {
             ch.sendMessageEmbeds(embed).setComponents(buttonsArr).queue(msg -> {
                 raidRepository.updateDiscordMessageId(raidId2, msg.getIdLong());
                 log.info("syncRaidCardFresh NEW ok (raidId={}, msgId={})", raidId2, msg.getIdLong());
-            }, err -> log.warn("raid card fresh send failed (raidId={}, trigger={}): {}", raidId2, trigger, err.toString()));
+            }, err -> { noteRateLimitError(err); log.warn("raid card fresh send failed (raidId={}, trigger={}): {}", raidId2, trigger, err.toString()); });
         } catch (Exception e) {
             log.warn("syncRaidCardFresh error (raidId={}, trigger={}): {}", raidId, trigger, e.toString(), e);
         }
@@ -481,6 +506,7 @@ public class DiscordNotifier {
     @org.springframework.scheduling.annotation.Async("discordExecutor")
     public void syncLootCard(Long lootId, LootTrigger trigger) {
         try {
+            if (inCooldown()) { log.warn("syncLootCard skipped (Discord 429 cooldown · {}s 남음, lootId={})", cooldownRemainingSec(), lootId); return; }
             RaidLoot l = lootRepository.findById(lootId).orElse(null);
             if (l == null) return;
             DiscordBotService bot = bot();
@@ -497,10 +523,10 @@ public class DiscordNotifier {
                 final Long lootIdF = lootId;
                 ch.sendMessageEmbeds(embed).queue(msg -> {
                     lootRepository.updateDiscordMessageId(lootIdF, msg.getIdLong());
-                }, err -> log.warn("loot card send failed: {}", err.toString()));
+                }, err -> { noteRateLimitError(err); log.warn("loot card send failed: {}", err.toString()); });
             } else {
                 ch.editMessageEmbedsById(l.getDiscordMessageId(), embed).queue(null,
-                        err -> log.warn("loot card edit failed: {}", err.toString()));
+                        err -> { noteRateLimitError(err); log.warn("loot card edit failed: {}", err.toString()); });
             }
         } catch (Exception e) {
             log.warn("syncLootCard error: {}", e.toString());
@@ -631,12 +657,13 @@ public class DiscordNotifier {
     @org.springframework.scheduling.annotation.Async("discordExecutor")
     public void postAlertMessage(String content) {
         try {
+            if (inCooldown()) { log.warn("postAlertMessage skipped (Discord 429 cooldown · {}s 남음)", cooldownRemainingSec()); return; }
             DiscordBotService b = bot();
             if (b == null || !b.isReady()) return;
             TextChannel ch = b.notifyChannel();
             if (ch == null || content == null || content.isBlank()) return;
             String msg = content.length() > 1900 ? content.substring(0, 1897) + "..." : content;
-            ch.sendMessage(msg).queue(null, err -> log.debug("alert send failed: {}", err.toString()));
+            ch.sendMessage(msg).queue(null, err -> { noteRateLimitError(err); log.debug("alert send failed: {}", err.toString()); });
         } catch (Exception e) {
             log.debug("postAlertMessage error: {}", e.toString());
         }
@@ -647,6 +674,7 @@ public class DiscordNotifier {
     @org.springframework.scheduling.annotation.Async("discordExecutor")
     public void postRaidPre30Fresh(Long raidId) {
         try {
+            if (inCooldown()) { log.warn("postRaidPre30Fresh skipped (Discord 429 cooldown · {}s 남음, raidId={})", cooldownRemainingSec(), raidId); return; }
             DiscordBotService b = bot();
             if (b == null || !b.isReady()) return;
             TextChannel ch = b.notifyChannel();
@@ -676,7 +704,7 @@ public class DiscordNotifier {
                     .queue(msg -> {
                         // targeted update (다른 필드 race 방지 · pre30Sent 반복 발송 버그 fix)
                         raidRepository.updateDiscordMessageId(raidId2, msg.getIdLong());
-                    }, err -> log.debug("pre30 fresh send failed: {}", err.toString()));
+                    }, err -> { noteRateLimitError(err); log.debug("pre30 fresh send failed: {}", err.toString()); });
         } catch (Exception e) {
             log.debug("postRaidPre30Fresh error: {}", e.toString());
         }

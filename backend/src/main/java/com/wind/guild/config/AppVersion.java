@@ -3,16 +3,17 @@ package com.wind.guild.config;
 public final class AppVersion {
     private AppVersion() {}
 
-    public static final String VERSION = "v1.0.50";
+    public static final String VERSION = "v1.0.51";
 
     /**
      * 이번 배포 변경사항만 담을 것 (누적 X · Discord 메시지 2000자 제한).
      * 새 배포마다 이 값을 갈아엎기.
      */
     public static final String CHANGELOG =
-            "🚨 Discord 글로벌 429 대응 (v1.0.49 TZ fix 부작용)\n" +
-            "  · TZ 수정 후 누적 stale raid 가 한 tick 에 몰려 처리 → API 폭주 → 글로벌 rate limit\n" +
-            "  · autoComplete: tick 당 최대 3개만 처리 (나머지 다음 tick)\n" +
-            "  · 6시간 이전 raid 는 backfill 로 간주 → 조용히 DONE, Discord 카드·챗·next 생성 모두 스킵\n" +
-            "  · 정상 raid (30분~6시간) 만 카드 발송";
+            "🛡 Discord 429 감지 시 전역 10분 cooldown (재쇄도로 ban 연장 방지)\n" +
+            "  · 어느 send/edit 콜백이든 err.toString 에 '429' 또는 'rate limit' 발견 시\n" +
+            "    globalCooldownUntilMillis 를 now+10분 으로 설정\n" +
+            "  · syncRaidCard·Fresh·postAlertMessage·postRaidPre30Fresh·syncLootCard 진입부에서\n" +
+            "    cooldown 체크 → 남은 초 로그 후 즉시 return (Discord API 호출 안 함)\n" +
+            "  · Discord 자체 ban 풀리는 시간과 별개로 우리도 API 자제 → ban 연장 위험 최소화";
 }
