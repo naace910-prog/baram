@@ -73,35 +73,53 @@ public class RaidScheduler {
         raidRepository.save(r);
     }
 
+    // Discord rate-limit 폭발 방지: 한 tick 에서 최대 이만큼만 처리, 나머지는 다음 tick.
+    private static final int AUTO_COMPLETE_MAX_PER_TICK = 3;
+    // 이보다 오래된 raid 는 backfill 로 간주 → 조용히 DONE + next 생성도 스킵 (Discord 스팸 방지).
+    private static final long BACKFILL_THRESHOLD_HOURS = 6;
+
     @Scheduled(fixedDelay = 60_000, initialDelay = 45_000)
     @Transactional
     public void autoComplete() {
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime after = now.minusDays(3);       // 3일 전 이후만 (backfill 스팸 방지)
         LocalDateTime before = now.minusMinutes(30);  // 30분 지난 것
+        LocalDateTime backfillCut = now.minusHours(BACKFILL_THRESHOLD_HOURS);
 
         List<Raid> stale = raidRepository.findByStatusAndScheduledAtBetween(
                 RaidStatus.PLANNED, after, before);
+        int processed = 0;
         for (Raid r : stale) {
+            if (processed >= AUTO_COMPLETE_MAX_PER_TICK) {
+                log.info("autoComplete tick cap reached ({} 처리, {} 남음 · 다음 tick 에서 계속)",
+                        AUTO_COMPLETE_MAX_PER_TICK, stale.size() - processed);
+                break;
+            }
+            boolean isBackfill = r.getScheduledAt().isBefore(backfillCut);
             try {
                 r.setStatus(RaidStatus.DONE);
                 raidRepository.save(r);
-                notifier.syncRaidCard(r.getId(), DiscordNotifier.RaidTrigger.STATUS);
                 String label = raidLabel(r);
-                chat.saveSystem("✅ 레이드 자동 완료 처리 · " + label + " · " + r.getScheduledAt().format(FMT));
-                log.info("자동 완료 처리: raid={} {}", r.getId(), label);
-                // 자동 완료 시 같은 대상 다음 raid 자동 생성 (시간 미정)
-                try {
-                    RaidService rs = raidServiceProvider.getIfAvailable();
-                    if (rs != null) {
-                        Raid next = rs.createNextAfterDone(r);
-                        if (next != null) {
-                            notifier.syncRaidCard(next.getId(), DiscordNotifier.RaidTrigger.CREATED);
-                            chat.saveSystem("🆕 다음 레이드 자동 등록 · " + label + " · 시간 미정 (Discord 카드에서 설정)");
-                            log.info("자동 다음 레이드 생성: raid={} label={}", next.getId(), label);
+                if (isBackfill) {
+                    // 오래된 raid: Discord API 아끼려고 조용히 DONE 만 (카드·챗 알림·next 생성 모두 스킵)
+                    log.info("자동 완료 (backfill · 알림 생략): raid={} {} scheduled={}", r.getId(), label, r.getScheduledAt());
+                } else {
+                    notifier.syncRaidCard(r.getId(), DiscordNotifier.RaidTrigger.STATUS);
+                    chat.saveSystem("✅ 레이드 자동 완료 처리 · " + label + " · " + r.getScheduledAt().format(FMT));
+                    log.info("자동 완료 처리: raid={} {}", r.getId(), label);
+                    try {
+                        RaidService rs = raidServiceProvider.getIfAvailable();
+                        if (rs != null) {
+                            Raid next = rs.createNextAfterDone(r);
+                            if (next != null) {
+                                notifier.syncRaidCard(next.getId(), DiscordNotifier.RaidTrigger.CREATED);
+                                chat.saveSystem("🆕 다음 레이드 자동 등록 · " + label + " · 시간 미정 (Discord 카드에서 설정)");
+                                log.info("자동 다음 레이드 생성: raid={} label={}", next.getId(), label);
+                            }
                         }
-                    }
-                } catch (Exception ex) { log.warn("자동 다음 레이드 생성 실패 raid {}: {}", r.getId(), ex.toString()); }
+                    } catch (Exception ex) { log.warn("자동 다음 레이드 생성 실패 raid {}: {}", r.getId(), ex.toString()); }
+                }
+                processed++;
             } catch (Exception e) {
                 log.warn("자동 완료 실패 raid {}: {}", r.getId(), e.toString());
             }
