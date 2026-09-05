@@ -66,8 +66,20 @@ public class DiscordBotService extends ListenerAdapter {
     private volatile int connectAttempts = 0;
     private volatile boolean connectLoopRunning = false;
 
-    /** 재시도 backoff (초). 마지막 값에서 고정 반복. Discord IDENTIFY 한도를 아끼려고 넉넉히. */
+    /** 일반 실패 backoff (초). 마지막 값에서 고정 반복. */
     private static final int[] RETRY_BACKOFF_SEC = {60, 120, 300, 600, 900, 1800};
+
+    /**
+     * 429(Cloudflare IP 차단) 전용 backoff (초). 훨씬 길게.
+     * 차단 상태에서 짧은 주기로 두드리면 차단이 연장되므로 처음부터 15분 이상 쉰다.
+     */
+    private static final int[] RETRY_BACKOFF_SEC_429 = {900, 1800, 3600};
+
+    private static boolean isRateLimited(String err) {
+        if (err == null) return false;
+        String s = err.toLowerCase();
+        return s.contains("429") || s.contains("too many requests") || s.contains("global rate limit");
+    }
 
     private DiscordNotifier notifier() { return notifierProvider.getIfAvailable(); }
     private ChatService chatService() { return chatServiceProvider.getIfAvailable(); }
@@ -110,10 +122,13 @@ public class DiscordBotService extends ListenerAdapter {
                     log.info("Discord bot connected (attempt {})", connectAttempts);
                     return;
                 }
-                int idx = Math.min(connectAttempts - 1, RETRY_BACKOFF_SEC.length - 1);
-                int waitSec = RETRY_BACKOFF_SEC[idx];
-                log.warn("Discord 연결 실패 (attempt {}) · {}초 뒤 재시도 · 원인: {}",
-                        connectAttempts, waitSec, lastConnectError);
+                // 429(IP 차단)면 짧게 두드릴수록 차단이 연장되므로 별도의 긴 backoff 사용
+                boolean rl = isRateLimited(lastConnectError);
+                int[] table = rl ? RETRY_BACKOFF_SEC_429 : RETRY_BACKOFF_SEC;
+                int idx = Math.min(connectAttempts - 1, table.length - 1);
+                int waitSec = table[idx];
+                log.warn("Discord 연결 실패 (attempt {}, rateLimited={}) · {}초 뒤 재시도 · 원인: {}",
+                        connectAttempts, rl, waitSec, lastConnectError);
                 Thread.sleep(waitSec * 1000L);
             }
         } catch (InterruptedException ie) {
