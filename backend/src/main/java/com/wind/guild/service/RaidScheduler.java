@@ -34,6 +34,27 @@ public class RaidScheduler {
 
     private static final DateTimeFormatter FMT = DateTimeFormatter.ofPattern("MM/dd(E) HH:mm", java.util.Locale.KOREAN);
 
+    /**
+     * 트랜잭션 커밋 후 실행 (트랜잭션이 없으면 즉시 실행).
+     *
+     * notifier 메서드들은 @Async 라 별도 스레드/트랜잭션에서 DB 를 다시 읽는다.
+     * 커밋 전에 호출하면 변경 전 상태를 읽어 잘못된 카드를 만들거나 조건 분기가 어긋난다.
+     * (실제 사고: 자동완료 시 status 가 PLANNED 로 읽혀 득템 버튼 카드가 발송되지 않음)
+     */
+    private void runAfterCommit(Runnable action) {
+        if (org.springframework.transaction.support.TransactionSynchronizationManager.isSynchronizationActive()) {
+            org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                    new org.springframework.transaction.support.TransactionSynchronization() {
+                        @Override public void afterCommit() {
+                            try { action.run(); }
+                            catch (Exception e) { log.warn("afterCommit 작업 실패: {}", e.toString(), e); }
+                        }
+                    });
+        } else {
+            action.run();
+        }
+    }
+
     @Scheduled(fixedDelay = 60_000, initialDelay = 30_000)
     @Transactional
     public void checkPre30() {
@@ -61,14 +82,21 @@ public class RaidScheduler {
     public void dispatchPre30(Raid r, boolean manual) {
         LocalDateTime now = LocalDateTime.now();
         long minsLeft = Math.max(0, java.time.Duration.between(now, r.getScheduledAt()).toMinutes());
-        notifier.postRaidPre30Fresh(r.getId());
-        String label = raidLabel(r);
-        String prefix = manual ? "🔔 문주 발송 · " : "⏰ ";
-        push.sendToAll(prefix + "곧 시작: " + label + " (" + minsLeft + "분 뒤)",
-                r.getScheduledAt().format(FMT),
-                "/raids/" + r.getId());
-        chat.saveSystem(prefix + minsLeft + "분 뒤 시작 · " + label + " · " + r.getScheduledAt().format(FMT),
-                "RAID_VOTE", r.getId());
+        // lazy 연관 접근은 트랜잭션 안에서 미리 해소
+        final Long raidId = r.getId();
+        final String label = raidLabel(r);
+        final String whenText = r.getScheduledAt().format(FMT);
+        final String prefix = manual ? "🔔 문주 발송 · " : "⏰ ";
+        // ⚠ 커밋 이후에 발송.
+        //   커밋 전에 부르면 postRaidPre30Fresh 가 갱신한 discordMessageId 를
+        //   이 트랜잭션의 오래된 엔티티가 커밋하면서 덮어쓴다 (리마인더 카드 유실).
+        runAfterCommit(() -> {
+            notifier.postRaidPre30Fresh(raidId);
+            push.sendToAll(prefix + "곧 시작: " + label + " (" + minsLeft + "분 뒤)",
+                    whenText, "/raids/" + raidId);
+            chat.saveSystem(prefix + minsLeft + "분 뒤 시작 · " + label + " · " + whenText,
+                    "RAID_VOTE", raidId);
+        });
         r.setPre30Sent(true);
         raidRepository.save(r);
     }
@@ -99,26 +127,42 @@ public class RaidScheduler {
             try {
                 r.setStatus(RaidStatus.DONE);
                 raidRepository.save(r);
-                String label = raidLabel(r);
+                // ⚠ lazy 연관(target) 접근은 트랜잭션 안에서 미리 끝내둔다.
+                //   afterCommit 콜백 시점엔 세션이 닫혀 LazyInitializationException 이 난다.
+                final Long doneRaidId = r.getId();
+                final String label = raidLabel(r);
+                final String whenText = r.getScheduledAt().format(FMT);
                 if (isBackfill) {
                     // 오래된 raid: Discord API 아끼려고 조용히 DONE 만 (카드·챗 알림·next 생성 모두 스킵)
-                    log.info("자동 완료 (backfill · 알림 생략): raid={} {} scheduled={}", r.getId(), label, r.getScheduledAt());
+                    log.info("자동 완료 (backfill · 알림 생략): raid={} {} scheduled={}", doneRaidId, label, r.getScheduledAt());
                 } else {
-                    // CategoryAware: DONE 최초 1회는 새 메시지로 발송 (득템 입력 버튼이 묻히지 않도록)
-                    notifier.syncRaidCardCategoryAware(r.getId(), DiscordNotifier.RaidTrigger.STATUS);
-                    chat.saveSystem("✅ 레이드 자동 완료 처리 · " + label + " · " + r.getScheduledAt().format(FMT));
-                    log.info("자동 완료 처리: raid={} {}", r.getId(), label);
+                    Long nextRaidId = null;
                     try {
                         RaidService rs = raidServiceProvider.getIfAvailable();
                         if (rs != null) {
                             Raid next = rs.createNextAfterDone(r);
                             if (next != null) {
-                                notifier.syncRaidCard(next.getId(), DiscordNotifier.RaidTrigger.CREATED);
-                                chat.saveSystem("🆕 다음 레이드 자동 등록 · " + label + " · 시간 미정 (Discord 카드에서 설정)");
-                                log.info("자동 다음 레이드 생성: raid={} label={}", next.getId(), label);
+                                nextRaidId = next.getId();
+                                log.info("자동 다음 레이드 생성: raid={} label={}", nextRaidId, label);
                             }
                         }
-                    } catch (Exception ex) { log.warn("자동 다음 레이드 생성 실패 raid {}: {}", r.getId(), ex.toString()); }
+                    } catch (Exception ex) { log.warn("자동 다음 레이드 생성 실패 raid {}: {}", doneRaidId, ex.toString()); }
+
+                    // ⚠ Discord 발송은 반드시 커밋 이후에.
+                    //   notifier 는 @Async 라 별도 스레드/트랜잭션에서 DB 를 다시 읽는다.
+                    //   커밋 전에 던지면 status 가 아직 PLANNED 로 읽혀
+                    //   (1) DONE 신규발송 조건이 거짓이 되고
+                    //   (2) buildRaidButtons 가 득템 버튼 대신 투표 버튼을 그린다.
+                    final Long nextIdFinal = nextRaidId;
+                    runAfterCommit(() -> {
+                        notifier.syncRaidCardCategoryAware(doneRaidId, DiscordNotifier.RaidTrigger.STATUS);
+                        chat.saveSystem("✅ 레이드 자동 완료 처리 · " + label + " · " + whenText);
+                        log.info("자동 완료 처리: raid={} {}", doneRaidId, label);
+                        if (nextIdFinal != null) {
+                            notifier.syncRaidCard(nextIdFinal, DiscordNotifier.RaidTrigger.CREATED);
+                            chat.saveSystem("🆕 다음 레이드 자동 등록 · " + label + " · 시간 미정 (Discord 카드에서 설정)");
+                        }
+                    });
                 }
                 processed++;
             } catch (Exception e) {
