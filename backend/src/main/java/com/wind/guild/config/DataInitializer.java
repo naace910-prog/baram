@@ -75,6 +75,8 @@ public class DataInitializer implements CommandLineRunner {
                 "ALTER TABLE raids ADD COLUMN IF NOT EXISTS loot_fresh_sent BOOLEAN NOT NULL DEFAULT FALSE");
         runSchemaFix("raids_dist_fresh_sent",
                 "ALTER TABLE raids ADD COLUMN IF NOT EXISTS dist_fresh_sent BOOLEAN NOT NULL DEFAULT FALSE");
+        runSchemaFix("raids_done_fresh_sent",
+                "ALTER TABLE raids ADD COLUMN IF NOT EXISTS done_fresh_sent BOOLEAN NOT NULL DEFAULT FALSE");
         runSchemaFix("raids_stale_dist_alerted",
                 "ALTER TABLE raids ADD COLUMN IF NOT EXISTS stale_dist_alerted BOOLEAN NOT NULL DEFAULT FALSE");
         runSchemaFix("raid_loots_distributed_by",

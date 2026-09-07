@@ -50,6 +50,10 @@ public class Raid {
     @Column(nullable = false)
     private boolean distFreshSent;
 
+    /** 완료(DONE) 카드를 새 메시지로 1회 발송했는지. edit 만 하면 채팅 위로 묻혀 안 보임. */
+    @Column(nullable = false)
+    private boolean doneFreshSent;
+
     @Column(nullable = false)
     private boolean staleDistAlerted;
 

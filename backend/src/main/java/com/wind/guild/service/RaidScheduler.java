@@ -104,7 +104,8 @@ public class RaidScheduler {
                     // 오래된 raid: Discord API 아끼려고 조용히 DONE 만 (카드·챗 알림·next 생성 모두 스킵)
                     log.info("자동 완료 (backfill · 알림 생략): raid={} {} scheduled={}", r.getId(), label, r.getScheduledAt());
                 } else {
-                    notifier.syncRaidCard(r.getId(), DiscordNotifier.RaidTrigger.STATUS);
+                    // CategoryAware: DONE 최초 1회는 새 메시지로 발송 (득템 입력 버튼이 묻히지 않도록)
+                    notifier.syncRaidCardCategoryAware(r.getId(), DiscordNotifier.RaidTrigger.STATUS);
                     chat.saveSystem("✅ 레이드 자동 완료 처리 · " + label + " · " + r.getScheduledAt().format(FMT));
                     log.info("자동 완료 처리: raid={} {}", r.getId(), label);
                     try {

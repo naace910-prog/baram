@@ -76,7 +76,8 @@ public class RaidController {
     @PutMapping("/{id}")
     public RaidDto.DetailView update(@PathVariable Long id, @Valid @RequestBody RaidDto.UpdateRequest req) {
         var result = raidService.updateInternal(id, req);
-        discord.syncRaidCard(id, DiscordNotifier.RaidTrigger.STATUS);
+        // CategoryAware: DONE 최초 1회는 새 메시지 (득템 입력 버튼 카드가 채팅에 묻히지 않도록)
+        discord.syncRaidCardCategoryAware(id, DiscordNotifier.RaidTrigger.STATUS);
         // 수동 완료 시 자동 생성된 다음 raid Discord 카드 발송 (스케줄러 경로와 동일 처리)
         if (result.nextRaid() != null) {
             discord.syncRaidCard(result.nextRaid().getId(), DiscordNotifier.RaidTrigger.CREATED);

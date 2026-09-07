@@ -246,6 +246,12 @@ public class DiscordNotifier {
                 r.setLootFreshSent(true); raidRepository.save(r); firstOfCategory = true;
             } else if (trigger == RaidTrigger.DIST && !r.isDistFreshSent()) {
                 r.setDistFreshSent(true); raidRepository.save(r); firstOfCategory = true;
+            } else if (trigger == RaidTrigger.STATUS
+                    && r.getStatus() == RaidStatus.DONE && !r.isDoneFreshSent()) {
+                // 완료 카드는 득템 입력 버튼을 담고 있어 반드시 보여야 한다.
+                // edit 만 하면 기존 메시지(대개 30분 전 리마인더)를 고치는 것이라
+                // 알림도 없고 채팅 위로 묻혀서 사용자가 못 본다.
+                r.setDoneFreshSent(true); raidRepository.save(r); firstOfCategory = true;
             }
             if (firstOfCategory) syncRaidCardFresh(raidId, trigger);
             else syncRaidCard(raidId, trigger);
