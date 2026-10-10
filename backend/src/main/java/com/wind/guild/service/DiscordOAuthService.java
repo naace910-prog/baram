@@ -41,6 +41,16 @@ public class DiscordOAuthService {
     }
 
     public String buildAuthorizeUrl() {
+        return buildAuthorizeUrl(null);
+    }
+
+    /** state 는 콜백으로 그대로 돌아온다 — 데스크톱 앱 로그인 구분용 (null 이면 웹 로그인) */
+    public String buildAuthorizeUrl(String state) {
+        String url = buildBaseAuthorizeUrl();
+        return state == null ? url : url + "&state=" + URLEncoder.encode(state, StandardCharsets.UTF_8);
+    }
+
+    private String buildBaseAuthorizeUrl() {
         if (!isConfigured()) throw new IllegalStateException("Discord OAuth이 설정되지 않았습니다");
         // prompt=none: 이미 승인한 앱이면 승인 화면 스킵 → Discord 로그인 상태만 있으면 자동 리다이렉트
         //  · 최초 1회는 승인 화면 뜸 (그건 필수 · 사용자가 동의해야 함)

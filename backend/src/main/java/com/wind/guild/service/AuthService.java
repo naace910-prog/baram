@@ -34,6 +34,20 @@ public class AuthService {
         return new AuthDto.LoginResponse(m.getId(), m.getAccount(), m.getNickname(), m.getRole());
     }
 
+    /** 데스크톱 앱 Discord 로그인 — 브라우저에서 승인된 회원으로 앱 쪽 세션을 만든다 */
+    public AuthDto.LoginResponse loginById(Long memberId, HttpSession session) {
+        Member m = memberRepository.findById(memberId)
+                .orElseThrow(() -> new IllegalArgumentException("회원을 찾을 수 없습니다"));
+        if (!m.isActive()) {
+            throw new IllegalArgumentException("비활성 계정입니다");
+        }
+        session.setAttribute(SessionKeys.MEMBER_ID, m.getId());
+        session.setAttribute(SessionKeys.MEMBER_ACCOUNT, m.getAccount());
+        session.setAttribute(SessionKeys.MEMBER_NICKNAME, m.getNickname());
+        session.setAttribute(SessionKeys.MEMBER_ROLE, m.getRole().name());
+        return new AuthDto.LoginResponse(m.getId(), m.getAccount(), m.getNickname(), m.getRole());
+    }
+
     public void logout(HttpSession session) {
         session.invalidate();
     }
