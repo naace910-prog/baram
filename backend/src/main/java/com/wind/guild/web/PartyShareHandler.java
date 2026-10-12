@@ -87,6 +87,11 @@ public class PartyShareHandler extends TextWebSocketHandler {
         } catch (IOException e) {
             return;
         }
+        if ("bye".equals(in.path("t").asText())) {
+            // 앱의 '나가기' — 앞단 프록시가 끊김을 늦게(약 10초) 알리므로 직접 알려 주면 바로 목록에서 뺀다
+            raw.close(CloseStatus.NORMAL);
+            return;
+        }
         if (!"skill".equals(in.path("t").asText())) return;   // ping 등은 무시 (연결 유지용)
         String key = clean(in.path("k").asText(""), MAX_KEY);
         double left = in.path("l").asDouble(-1);
